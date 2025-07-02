@@ -6,7 +6,12 @@ SECRET_KEY = 'django-insecure-=)_apag4qh%zk&n_u@r1q%ddad@%d13q(+&n)sehit99_(y$il
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    '164.68.125.31',
+    'teamkonekt.com',
+    'www.teamkonekt.com',
+]
+
 
 INSTALLED_APPS = [
     'corsheaders',
