@@ -14,7 +14,7 @@ import {
 import axios from 'axios';
 import { AuthContext } from '../../App';
 
-const API_BASE = 'http://192.168.0.137:8000/api/employees/';
+const API_BASE = 'http://www.teamkonekt.com/api/employees/';
 
 const EmployeesComponent = () => {
   const { token } = useContext(AuthContext);

@@ -29,7 +29,7 @@ const SignInScreen = ({ navigation }) => {
 
   const handleSubmit = async () => {
     try {
-      const { data } = await axios.post('http://192.168.0.137:8000/api/login/', {
+      const { data } = await axios.post('http://www.teamkonekt.com/api/login/', {
         email: username,
         password,
       });

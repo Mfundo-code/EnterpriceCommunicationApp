@@ -20,7 +20,7 @@ const SignUpScreen = ({ navigation }) => {
     }
 
     try {
-      const response = await axios.post('http://192.168.0.137:8000/api/signup/', {
+      const response = await axios.post('http://www.teamkonekt.com/api/signup/', {
         username,
         email,
         password,
