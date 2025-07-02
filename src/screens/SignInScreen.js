@@ -1,5 +1,3 @@
-// src/screens/SignInScreen.js
-
 import React, { useState, useContext } from 'react';
 import { 
   View,
@@ -15,13 +13,12 @@ import { AuthContext } from '../../App';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const SignInScreen = ({ navigation }) => {
-  const [username, setUsername]             = useState(''); // holds email now
+  const [username, setUsername]             = useState('');
   const [password, setPassword]             = useState('');
   const [error, setError]                   = useState('');
   const [showPassword, setShowPassword]     = useState(false);
-  const { setToken, setUserType }           = useContext(AuthContext);
+  const { setToken, setUserType, setCompanyName } = useContext(AuthContext);
 
-  // Clear fields & errors whenever this screen is focused
   useFocusEffect(
     React.useCallback(() => {
       setUsername('');
@@ -33,17 +30,18 @@ const SignInScreen = ({ navigation }) => {
   const handleSubmit = async () => {
     try {
       const { data } = await axios.post('http://192.168.0.137:8000/api/login/', {
-        email: username,  // Change to email
+        email: username,
         password,
       });
 
       if (data.token) {
         const trimmedToken = data.token.trim();
         await AsyncStorage.setItem('authToken', trimmedToken);
-        await AsyncStorage.setItem('userType', data.user_type); // Store user type
+        await AsyncStorage.setItem('userType', data.user_type);
+        await AsyncStorage.setItem('companyName', data.company_name);
         setToken(trimmedToken);
-        setUserType(data.user_type); // Set user type in context
-        // navigation.replace('Home');
+        setUserType(data.user_type);
+        setCompanyName(data.company_name);
       }
     } catch (err) {
       setError(

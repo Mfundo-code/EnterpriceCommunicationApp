@@ -1,4 +1,3 @@
-// App.js
 import React, { useState, useEffect, createContext } from 'react';
 import { View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -12,18 +11,21 @@ import ReportsScreen from './src/screens/TasksScreen';
 import AnnouncementsScreen from './src/screens/AnnouncementsScreen';
 import YourWorkersScreen from './src/screens/YourWorkersScreen';
 import SuggestionBoxScreen from './src/screens/SuggestionBoxScreen';
+import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
+
 
 import { NotificationProvider } from './src/components/NotificationContext';
 import NotificationHandler from './src/components/NotificationHandler';
+import EmailConfirmationScreen from './src/screens/EmailConfirmationScreen';
 
-// Create AuthContext here in App.js
 export const AuthContext = createContext();
 
 const Stack = createStackNavigator();
 
 const App = () => {
   const [token, setToken] = useState(null);
-  const [userType, setUserType] = useState(null); // 'manager' or 'employee'
+  const [userType, setUserType] = useState(null);
+  const [companyName, setCompanyName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -31,9 +33,11 @@ const App = () => {
       try {
         const storedToken = await AsyncStorage.getItem('authToken');
         const storedUserType = await AsyncStorage.getItem('userType');
+        const storedCompanyName = await AsyncStorage.getItem('companyName');
         if (storedToken) {
           setToken(storedToken);
           setUserType(storedUserType);
+          setCompanyName(storedCompanyName || '');
         }
       } catch (error) {
         console.error(error);
@@ -54,7 +58,14 @@ const App = () => {
   }
 
   return (
-    <AuthContext.Provider value={{ token, setToken, userType, setUserType }}>
+    <AuthContext.Provider value={{ 
+      token, 
+      setToken, 
+      userType, 
+      setUserType,
+      companyName,
+      setCompanyName 
+    }}>
       <NavigationContainer>
         <NotificationProvider>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -65,16 +76,16 @@ const App = () => {
                 <Stack.Screen name="Announcements" component={AnnouncementsScreen} />
                 <Stack.Screen name="YourWorkers" component={YourWorkersScreen} />
                 <Stack.Screen name="SuggestionBoxScreen" component={SuggestionBoxScreen} />
+                <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
               </>
             ) : (
               <>
                 <Stack.Screen name="SignIn" component={SignInScreen} />
                 <Stack.Screen name="SignUp" component={SignUpScreen} />
+                <Stack.Screen name="EmailConfirmation" component={EmailConfirmationScreen}/>
               </>
             )}
           </Stack.Navigator>
-
-          {/* NotificationHandler listens for navigation changes and resets counts */}
           <NotificationHandler />
         </NotificationProvider>
       </NavigationContainer>

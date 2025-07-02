@@ -23,7 +23,9 @@ const MainLayout = ({ children }) => {
           onClose={() => setMoreDrawerVisible(false)}
           onTrainingPress={() => navigation.navigate('TrainingScreen')}
           onSuggestionBoxPress={() => navigation.navigate('SuggestionBoxScreen')}
-          onYourWorkersPress={() => navigation.navigate('YourWorkers')} // Added this
+          onYourWorkersPress={() => navigation.navigate('YourWorkers')}
+          onChangePasswordPress={() => navigation.navigate('ChangePassword')}
+          
         />
       )}
 

@@ -25,6 +25,7 @@ from .views import (
     MarkAnnouncementNotedView,
     NotedEmployeesView,
     current_user,
+    ConfirmEmailView,
 )
 
 router = DefaultRouter()
@@ -41,6 +42,7 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
+    path('confirm-email/', ConfirmEmailView.as_view(), name='confirm-email'),
 
     # Notifications
     path('notifications/count/', NotificationCountView.as_view(), name='notifications-count'),

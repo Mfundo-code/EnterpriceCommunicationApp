@@ -1,4 +1,3 @@
-// SignUpScreen.js
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import axios from 'axios';
@@ -29,15 +28,15 @@ const SignUpScreen = ({ navigation }) => {
         phone_number: phoneNumber,
       });
 
-      Alert.alert('Success', 'Sign up successful. Please sign in.');
+      navigation.navigate('EmailConfirmation', {
+        user_id: response.data.user_id
+      });
       setError('');
-      navigation.navigate('SignIn');
     } catch (err) {
       let errorMessage = 'An error occurred. Please try again.';
       const data = err.response?.data;
 
       if (data) {
-        // Handle field-specific errors (e.g. { email: ["This field is required."] })
         if (typeof data === 'object' && !data.detail) {
           const messages = Object
             .values(data)
@@ -47,7 +46,6 @@ const SignUpScreen = ({ navigation }) => {
             errorMessage = messages.join(' ');
           }
         }
-        // Handle DRF-style detail messages
         else if (data.detail) {
           errorMessage = data.detail;
         }

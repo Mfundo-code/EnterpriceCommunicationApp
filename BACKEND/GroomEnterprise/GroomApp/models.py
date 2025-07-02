@@ -2,6 +2,21 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 
+class EmailConfirmation(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='email_confirmations'
+    )
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Confirmation for {self.user.email} ({'used' if self.is_used else 'active'})"
+
+
 class ManagerProfile(models.Model):
     user = models.OneToOneField(
         User,

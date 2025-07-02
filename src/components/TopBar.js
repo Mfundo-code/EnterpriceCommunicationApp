@@ -1,5 +1,5 @@
 // src/components/TopBar.js
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   SafeAreaView,
   View,
@@ -8,18 +8,36 @@ import {
   StyleSheet,
 } from 'react-native';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
+import { AuthContext } from '../../App';
+import { useNavigation } from '@react-navigation/native';
 
-const TopBar = ({
-  onMenuPress = () => {},
-  isPressable = true,
-  companyName = 'MyCompany',
-}) => {
+const TopBar = ({ onMenuPress = () => {}, isPressable = true }) => {
+  const { companyName } = useContext(AuthContext);
+  const navigation = useNavigation();
+
+  // Get current route name to conditionally show back arrow
+  const state = navigation.getState();
+  const currentRoute = state.routes[state.index];
+  const currentRouteName = currentRoute.name;
+  
+  const showBackArrow = currentRouteName !== 'Home';
+
   return (
     <SafeAreaView>
       <View style={styles.container}>
-        <Text style={styles.companyName}>
-          {companyName.toUpperCase()}
-        </Text>
+        <View style={styles.leftContainer}>
+          {showBackArrow && (
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Home')} 
+              style={styles.backButton}
+            >
+              <FontAwesome name="arrow-left" style={styles.backIcon} />
+            </TouchableOpacity>
+          )}
+          <Text style={styles.companyName}>
+            {companyName ? companyName.toUpperCase() : 'COMPANY'}
+          </Text>
+        </View>
 
         {isPressable && (
           <View style={styles.iconsContainer}>
@@ -39,6 +57,7 @@ const TopBar = ({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1.5,
     borderBottomColor: '#d1e8ff',
@@ -46,15 +65,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
+  leftContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  backButton: {
+    padding: 5,
+    marginRight: 10,
+  },
+  backIcon: {
+    color: '#139beb',
+    fontSize: 20,
+  },
   companyName: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#139beb',
     textTransform: 'uppercase',
+    flexShrink: 1,
   },
   iconsContainer: {
     flexDirection: 'row',
-    marginLeft: 'auto',
   },
   iconWrapper: {
     padding: 6,

@@ -10,6 +10,7 @@ from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
+import random
 
 from .models import (
     Employee,
@@ -20,6 +21,7 @@ from .models import (
     Suggestion,
     ManagerProfile,
     EmployeeNotification,
+    EmailConfirmation,
 )
 from .serializers import (
     ManagerSignupSerializer,
@@ -50,6 +52,88 @@ class ManagerSignupView(generics.CreateAPIView):
     serializer_class = ManagerSignupSerializer
     permission_classes = [AllowAny]
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
+        username = serializer.validated_data['username']
+        company_name = serializer.validated_data['company_name']
+        phone_number = serializer.validated_data['phone_number']
+        
+        # Create user but mark as inactive
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            is_active=False  # Inactive until email confirmed
+        )
+        
+        # Create manager profile
+        manager_profile = ManagerProfile.objects.create(
+            user=user,
+            company_name=company_name,
+            phone_number=phone_number
+        )
+        
+        # Generate confirmation code (6 digits)
+        confirmation_code = str(random.randint(100000, 999999))
+        
+        # Create confirmation record (valid for 24 hours)
+        expires_at = timezone.now() + timedelta(hours=24)
+        EmailConfirmation.objects.create(
+            user=user,
+            code=confirmation_code,
+            expires_at=expires_at
+        )
+        
+        # TODO: Send email with confirmation code
+        print(f"Confirmation code for {email}: {confirmation_code}")
+        
+        return Response({
+            'message': 'Confirmation code sent to your email',
+            'user_id': user.id
+        }, status=status.HTTP_201_CREATED)
+
+
+class ConfirmEmailView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        user_id = request.data.get('user_id')
+        code = request.data.get('code')
+        
+        if not user_id or not code:
+            return Response(
+                {'error': 'Both user_id and code are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            confirmation = EmailConfirmation.objects.get(
+                user_id=user_id,
+                code=code,
+                is_used=False,
+                expires_at__gt=timezone.now()
+            )
+        except EmailConfirmation.DoesNotExist:
+            return Response(
+                {'error': 'Invalid or expired code'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Activate user
+        user = confirmation.user
+        user.is_active = True
+        user.save()
+        
+        # Mark confirmation as used
+        confirmation.is_used = True
+        confirmation.save()
+        
+        return Response({'message': 'Email confirmed successfully'})
+
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -63,6 +147,13 @@ class LoginView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # Check if user is active
+        if not user.is_active:
+            return Response(
+                {'error': 'Account not activated. Please confirm your email.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
         user = authenticate(username=user.username, password=password)
 
         if user:
@@ -70,14 +161,18 @@ class LoginView(APIView):
 
             if hasattr(user, 'manager_profile'):
                 user_type = 'manager'
+                company_name = user.manager_profile.company_name
             elif hasattr(user, 'employee_profile'):
                 user_type = 'employee'
+                company_name = user.employee_profile.manager.manager_profile.company_name
             else:
                 user_type = 'unknown'
+                company_name = ''
 
             return Response({
                 'token': token.key,
-                'user_type': user_type
+                'user_type': user_type,
+                'company_name': company_name
             })
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -239,25 +334,21 @@ class SuggestionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if hasattr(self.request.user, 'manager_profile'):
-            # Managers see all suggestions sent to them
             return Suggestion.objects.filter(
                 manager=self.request.user
             ).order_by('-created_at')
         elif hasattr(self.request.user, 'employee_profile'):
-            # Employees see only their own suggestions
             return Suggestion.objects.filter(
                 employee=self.request.user.employee_profile
             ).order_by('-created_at')
         return Suggestion.objects.none()
 
     def get_permissions(self):
-        # Allow managers to update status
         if self.action in ['update', 'partial_update']:
             return [IsAuthenticated(), IsManager()]
         return [IsAuthenticated()]
 
     def partial_update(self, request, *args, **kwargs):
-        # Only allow status updates
         if 'status' in request.data:
             return super().partial_update(request, *args, **kwargs)
         return Response(
@@ -267,7 +358,6 @@ class SuggestionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         if hasattr(self.request.user, 'employee_profile'):
-            # For employees: set manager and employee
             emp = self.request.user.employee_profile
             suggestion = serializer.save(
                 manager=emp.manager,
@@ -419,23 +509,6 @@ class SetDailySummaryTimeView(APIView):
         return Response({'detail': 'Daily summary time updated successfully.'})
 
 
-class ChangePasswordView(APIView):
-    authentication_classes = [TokenAuthentication]
-    permission_permissions = [IsAuthenticated]
-
-    def post(self, request):
-        user = request.user
-        old_password = request.data.get('old_password')
-        new_password = request.data.get('new_password')
-
-        if not user.check_password(old_password):
-            return Response({'error': 'Incorrect old password'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user.set_password(new_password)
-        user.save()
-        return Response({'message': 'Password updated successfully'})
-
-
 class AnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = AnnouncementSerializer
     authentication_classes = [TokenAuthentication]
@@ -508,3 +581,26 @@ class NotedEmployeesView(generics.ListAPIView):
     def get_queryset(self):
         announcement = get_object_or_404(Announcement, pk=self.kwargs['pk'])
         return announcement.noted_by.all()
+    
+class ChangePasswordView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not old_password or not new_password or not confirm_password:
+            return Response({'error': 'All fields are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if new_password != confirm_password:
+            return Response({'error': 'New passwords do not match'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not user.check_password(old_password):
+            return Response({'error': 'Incorrect old password'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+        return Response({'message': 'Password updated successfully'})

@@ -1,7 +1,14 @@
 // src/components/MoreComponent.js
 import React, { useContext } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
+import { 
+  View, 
+  TouchableOpacity, 
+  Text, 
+  StyleSheet, 
+  Alert 
+} from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons'; // Add Ionicons for lock icon
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from "../../App";
 import { useNotifications } from './NotificationContext';
@@ -10,7 +17,8 @@ const MoreComponent = ({
   visible, 
   onClose,
   onSuggestionBoxPress,
-  onYourWorkersPress
+  onYourWorkersPress,
+  onChangePasswordPress // Add this prop
 }) => {
   const { setToken, userType } = useContext(AuthContext);
   const { notificationCounts } = useNotifications();
@@ -20,7 +28,7 @@ const MoreComponent = ({
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem('authToken');
-      setToken(null); // Update context
+      setToken(null);
       onClose();
       Alert.alert('Logged Out', 'You have been logged out successfully!');
     } catch (error) {
@@ -53,20 +61,32 @@ const MoreComponent = ({
         style={styles.moreItem}
         onPress={() => {
           onSuggestionBoxPress && onSuggestionBoxPress();
+            onClose();
+          }}
+        >
+          <View style={styles.suggestionBoxContainer}>
+            <MaterialCommunityIcons name="package-variant" size={20} color="#139beb" />
+            <Text style={styles.moreText}>Suggestion Box</Text>
+            {notificationCounts.suggestions > 0 && (
+              <View style={styles.suggestionBadge}>
+                <Text style={styles.suggestionBadgeText}>
+                  {notificationCounts.suggestions}
+                </Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+
+      {/* Change Password Option */}
+      <TouchableOpacity 
+        style={styles.moreItem}
+        onPress={() => {
+          onChangePasswordPress && onChangePasswordPress();
           onClose();
         }}
       >
-        <View style={styles.suggestionBoxContainer}>
-          <MaterialCommunityIcons name="package-variant" size={20} color="#139beb" />
-          <Text style={styles.moreText}>Suggestion Box</Text>
-          {notificationCounts.suggestions > 0 && (
-            <View style={styles.suggestionBadge}>
-              <Text style={styles.suggestionBadgeText}>
-                {notificationCounts.suggestions}
-              </Text>
-            </View>
-          )}
-        </View>
+        <Ionicons name="lock-closed" size={20} color="#139beb" />
+        <Text style={styles.moreText}>Change Password</Text>
       </TouchableOpacity>
 
       {/* Logout Option */}
