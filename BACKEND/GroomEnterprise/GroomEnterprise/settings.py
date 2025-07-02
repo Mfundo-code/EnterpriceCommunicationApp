@@ -133,7 +133,6 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
-ALLOWED_HOSTS = ['164.68.125.31', 'localhost', 'domain.com']
 
 # Email Configuration 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
