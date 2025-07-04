@@ -15,7 +15,7 @@ import dayjs from 'dayjs';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNotifications } from '../NotificationContext';
 
-const API_BASE = 'http://www.teamkonekt.com/api/';
+const API_BASE = 'http://www.teamkonekt.com/api';
 
 const EmployeeTasksComponent = () => {
   const { token } = useContext(AuthContext);

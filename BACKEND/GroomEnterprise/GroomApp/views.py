@@ -221,73 +221,52 @@ def current_user(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def check_notifications(request):
-    # Get timestamp of last check from request
-    last_checked = request.query_params.get('last_checked', None)
-    
-    # If no last_checked provided, return all as false
-    if not last_checked:
-        return Response({
-            'reports': False,
-            'tasks': False,
-            'announcements': False,
-            'suggestions': False
-        })
-    
-    # Convert to datetime using more flexible parser
-    try:
-        # First try Django's built-in parser
-        last_checked_dt = parse_datetime(last_checked)
+def notification_counts(request):
+    user = request.user
+    response_data = {
+        'home': 0,
+        'tasks': 0,
+        'announcements': 0,
+        'suggestions': 0
+    }
+
+    # For Managers
+    if hasattr(user, 'manager_profile'):
+        # Home: Unread reports
+        response_data['home'] = ManagerNotification.objects.filter(
+            manager=user,
+            report__isnull=False,
+            is_read=False
+        ).count()
         
-        # If that fails, try removing milliseconds
-        if last_checked_dt is None:
-            # Handle formats without milliseconds
-            last_checked_dt = parse_datetime(last_checked.replace('Z', '+00:00'))
-            
-        # Still None? Handle the format with 'Z' explicitly
-        if last_checked_dt is None and 'Z' in last_checked:
-            last_checked_dt = parse_datetime(last_checked.replace('Z', '+00:00'))
+        # Tasks: Pending/in-progress tasks
+        response_data['tasks'] = Task.objects.filter(
+            assigned_to__manager=user,
+            status__in=['PENDING', 'IN_PROGRESS']
+        ).count()
         
-        # Final fallback if still None
-        if last_checked_dt is None:
-            last_checked_dt = timezone.datetime.fromisoformat(last_checked)
+        # Suggestions: Unread suggestions
+        response_data['suggestions'] = ManagerNotification.objects.filter(
+            manager=user,
+            suggestion__isnull=False,
+            is_read=False
+        ).count()
+    
+    # For Employees
+    elif hasattr(user, 'employee_profile'):
+        # Home: Pending/in-progress tasks
+        response_data['home'] = Task.objects.filter(
+            assigned_to__user=user,
+            status__in=['PENDING', 'IN_PROGRESS']
+        ).count()
         
-        # Ensure we have an aware datetime
-        if timezone.is_naive(last_checked_dt):
-            last_checked_dt = timezone.make_aware(last_checked_dt)
-    except (ValueError, TypeError, AttributeError):
-        return Response({'error': 'Invalid last_checked format'}, status=400)
+        # Announcements: Unread announcements
+        response_data['announcements'] = Announcement.objects.filter(
+            manager=user.employee_profile.manager,
+            created_at__gt=timezone.now() - timedelta(days=7)
+        ).exclude(noted_by=user.employee_profile).count()
     
-    # Check for new reports
-    new_reports = Report.objects.filter(
-        created_at__gt=last_checked_dt,
-        employee__manager=request.user
-    ).exists()
-    
-    # Check for new tasks
-    new_tasks = Task.objects.filter(
-        created_at__gt=last_checked_dt,
-        assigned_to__manager=request.user
-    ).exists()
-    
-    # Check for new announcements
-    new_announcements = Announcement.objects.filter(
-        created_at__gt=last_checked_dt,
-        manager=request.user
-    ).exists()
-    
-    # Check for new suggestions
-    new_suggestions = Suggestion.objects.filter(
-        created_at__gt=last_checked_dt,
-        manager=request.user
-    ).exists()
-    
-    return Response({
-        'reports': new_reports,
-        'tasks': new_tasks,
-        'announcements': new_announcements,
-        'suggestions': new_suggestions
-    })
+    return Response(response_data)
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
@@ -374,45 +353,6 @@ class ReportViewSet(viewsets.ModelViewSet):
         report.save()
         serializer = self.get_serializer(report)
         return Response(serializer.data)
-
-
-class NotificationCountView(APIView):
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
-
-    def get(self, request):
-        manager = request.user
-        counts = {
-            'reports': ManagerNotification.objects.filter(manager=manager, report__isnull=False, is_read=False).count(),
-            'suggestions': ManagerNotification.objects.filter(manager=manager, suggestion__isnull=False, is_read=False).count(),
-            'tasks': ManagerNotification.objects.filter(manager=manager, task__isnull=False, is_read=False).count(),
-        }
-        counts['total'] = sum(counts.values())
-        return Response(counts)
-
-
-class UnreadReportsView(generics.ListAPIView):
-    serializer_class = ManagerNotificationSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
-
-    def get_queryset(self):
-        return ManagerNotification.objects.filter(
-            manager=self.request.user,
-            report__isnull=False,
-            is_read=False
-        ).select_related('report__employee').order_by('-created_at')
-
-
-class MarkNotificationReadView(APIView):
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
-
-    def post(self, request, pk):
-        notif = get_object_or_404(ManagerNotification, pk=pk, manager=request.user)
-        notif.is_read = True
-        notif.save()
-        return Response({'detail': 'Marked as read.'})
 
 
 class SuggestionViewSet(viewsets.ModelViewSet):
@@ -600,7 +540,7 @@ class SetDailySummaryTimeView(APIView):
 class AnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = AnnouncementSerializer
     authentication_classes = [TokenAuthentication]
-    permission_permissions = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -617,7 +557,7 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 class EmployeeNotificationViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeNotificationSerializer
     authentication_classes = [TokenAuthentication]
-    permission_permissions = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         if hasattr(self.request.user, 'employee_profile'):
@@ -628,7 +568,7 @@ class EmployeeNotificationViewSet(viewsets.ModelViewSet):
 class EmployeeTaskView(generics.ListAPIView):
     serializer_class = TaskSerializer
     authentication_classes = [TokenAuthentication]
-    permission_permissions = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
     pagination_class = TaskPagination
 
     def get_queryset(self):

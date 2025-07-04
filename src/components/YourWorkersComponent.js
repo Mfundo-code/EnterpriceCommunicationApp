@@ -369,6 +369,7 @@ const styles = StyleSheet.create({
   },
   copyButton: {
     backgroundColor: '#4CAF50',
+    marginTop: 10,
   },
   employeeItem: {
     padding: 12,

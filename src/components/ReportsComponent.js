@@ -18,7 +18,7 @@ import { AuthContext } from '../../App';
 import dayjs from 'dayjs';
 import { useNotifications } from './NotificationContext';
 
-const API_BASE = 'http://www.teamkonekt.com/api/';
+const API_BASE = 'http://www.teamkonekt.com/api';
 
 const ReportsComponent = () => {
   const { token } = useContext(AuthContext);

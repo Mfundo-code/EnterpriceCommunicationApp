@@ -17,7 +17,7 @@ import dayjs from 'dayjs';
 import { AuthContext } from '../../../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
-const API_BASE = 'http://www.teamkonekt.com/api/';
+const API_BASE = 'http://www.teamkonekt.com/api';
 
 const SendToDropdown = ({
   selectedEmployeeId,
