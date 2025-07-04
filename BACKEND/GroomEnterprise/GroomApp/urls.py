@@ -7,7 +7,7 @@ from .views import (
     LogoutView,
     EmployeeViewSet,
     ReportViewSet,
-    NotificationCountView,
+    notification_counts,  # Changed from NotificationCountView
     UnreadReportsView,
     MarkNotificationReadView,
     TaskViewSet,
@@ -26,7 +26,7 @@ from .views import (
     NotedEmployeesView,
     current_user,
     ConfirmEmailView,
-    check_notifications,
+    # Removed check_notifications (not implemented)
 )
 
 router = DefaultRouter()
@@ -45,11 +45,11 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('confirm-email/', ConfirmEmailView.as_view(), name='confirm-email'),
 
-    # Notifications
-    path('notifications/count/', NotificationCountView.as_view(), name='notifications-count'),
+    # Notifications - UPDATED
+    path('notifications/count/', notification_counts, name='notifications-count'),  # Changed to function view
     path('reports/unread/', UnreadReportsView.as_view(), name='reports-unread'),
     path('notifications/read/<int:pk>/', MarkNotificationReadView.as_view(), name='notification-mark-read'),
-    path('notifications/check/', check_notifications, name='check-notifications'),
+    # Removed check_notifications endpoint
 
     # Report actions
     path('reports/<int:pk>/attend/', ReportViewSet.as_view({'post': 'attend'}), name='report-attend'),
@@ -69,12 +69,9 @@ urlpatterns = [
     path('announcements/<int:pk>/mark_noted/', MarkAnnouncementNotedView.as_view(), name='mark-announcement-noted'),
     path('announcements/<int:pk>/noted_employees/', NotedEmployeesView.as_view(), name='noted-employees'),
 
-    # Suggestion endpoints with filtering support
-    # List and create
+    # Suggestion endpoints
     path('suggestions/', SuggestionViewSet.as_view({'get': 'list', 'post': 'create'}), name='suggestion-list'),
-    # Retrieve, update, delete
     path('suggestions/<int:pk>/', SuggestionViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='suggestion-detail'),
-    # Filter by status via path: /suggestions/status/<status>/
     path('suggestions/status/<str:status>/', SuggestionViewSet.as_view({'get': 'list'}), name='suggestion-by-status'),
 
     # Employee task views
