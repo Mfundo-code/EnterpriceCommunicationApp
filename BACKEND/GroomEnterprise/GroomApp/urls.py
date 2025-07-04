@@ -7,7 +7,7 @@ from .views import (
     LogoutView,
     EmployeeViewSet,
     ReportViewSet,
-    notification_counts,  # Changed from NotificationCountView
+    notification_counts, 
     UnreadReportsView,
     MarkNotificationReadView,
     TaskViewSet,
@@ -26,7 +26,7 @@ from .views import (
     NotedEmployeesView,
     current_user,
     ConfirmEmailView,
-    # Removed check_notifications (not implemented)
+   
 )
 
 router = DefaultRouter()
