@@ -26,6 +26,7 @@ from .views import (
     NotedEmployeesView,
     current_user,
     ConfirmEmailView,
+    check_notifications,
 )
 
 router = DefaultRouter()
@@ -48,6 +49,7 @@ urlpatterns = [
     path('notifications/count/', NotificationCountView.as_view(), name='notifications-count'),
     path('reports/unread/', UnreadReportsView.as_view(), name='reports-unread'),
     path('notifications/read/<int:pk>/', MarkNotificationReadView.as_view(), name='notification-mark-read'),
+    path('notifications/check/', check_notifications, name='check-notifications'),
 
     # Report actions
     path('reports/<int:pk>/attend/', ReportViewSet.as_view({'post': 'attend'}), name='report-attend'),

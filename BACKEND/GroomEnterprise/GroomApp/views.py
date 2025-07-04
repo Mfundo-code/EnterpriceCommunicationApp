@@ -11,6 +11,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 import random
+from django.core.mail import send_mail
+from django.conf import settings
+from django.utils.dateparse import parse_datetime
 
 from .models import (
     Employee,
@@ -88,8 +91,23 @@ class ManagerSignupView(generics.CreateAPIView):
             expires_at=expires_at
         )
         
-        # TODO: Send email with confirmation code
-        print(f"Confirmation code for {email}: {confirmation_code}")
+        # Send email with confirmation code
+        try:
+            send_mail(
+                subject='Confirm Your Email for TeamKonekt',
+                message=f'Your confirmation code is: {confirmation_code}\n\n'
+                        f'This code will expire in 24 hours.',
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            # Handle email sending failure
+            user.delete()  # Clean up user record
+            return Response(
+                {'error': f'Failed to send confirmation email: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         
         return Response({
             'message': 'Confirmation code sent to your email',
@@ -200,6 +218,76 @@ def current_user(request):
         data['employee_profile_id'] = request.user.employee_profile.id
 
     return Response(data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_notifications(request):
+    # Get timestamp of last check from request
+    last_checked = request.query_params.get('last_checked', None)
+    
+    # If no last_checked provided, return all as false
+    if not last_checked:
+        return Response({
+            'reports': False,
+            'tasks': False,
+            'announcements': False,
+            'suggestions': False
+        })
+    
+    # Convert to datetime using more flexible parser
+    try:
+        # First try Django's built-in parser
+        last_checked_dt = parse_datetime(last_checked)
+        
+        # If that fails, try removing milliseconds
+        if last_checked_dt is None:
+            # Handle formats without milliseconds
+            last_checked_dt = parse_datetime(last_checked.replace('Z', '+00:00'))
+            
+        # Still None? Handle the format with 'Z' explicitly
+        if last_checked_dt is None and 'Z' in last_checked:
+            last_checked_dt = parse_datetime(last_checked.replace('Z', '+00:00'))
+        
+        # Final fallback if still None
+        if last_checked_dt is None:
+            last_checked_dt = timezone.datetime.fromisoformat(last_checked)
+        
+        # Ensure we have an aware datetime
+        if timezone.is_naive(last_checked_dt):
+            last_checked_dt = timezone.make_aware(last_checked_dt)
+    except (ValueError, TypeError, AttributeError):
+        return Response({'error': 'Invalid last_checked format'}, status=400)
+    
+    # Check for new reports
+    new_reports = Report.objects.filter(
+        created_at__gt=last_checked_dt,
+        employee__manager=request.user
+    ).exists()
+    
+    # Check for new tasks
+    new_tasks = Task.objects.filter(
+        created_at__gt=last_checked_dt,
+        assigned_to__manager=request.user
+    ).exists()
+    
+    # Check for new announcements
+    new_announcements = Announcement.objects.filter(
+        created_at__gt=last_checked_dt,
+        manager=request.user
+    ).exists()
+    
+    # Check for new suggestions
+    new_suggestions = Suggestion.objects.filter(
+        created_at__gt=last_checked_dt,
+        manager=request.user
+    ).exists()
+    
+    return Response({
+        'reports': new_reports,
+        'tasks': new_tasks,
+        'announcements': new_announcements,
+        'suggestions': new_suggestions
+    })
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
