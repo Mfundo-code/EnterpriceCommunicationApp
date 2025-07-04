@@ -219,54 +219,54 @@ def current_user(request):
 
     return Response(data)
 
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def notification_counts(request):
-    user = request.user
-    response_data = {
-        'home': 0,
-        'tasks': 0,
-        'announcements': 0,
-        'suggestions': 0
-    }
-
-    # For Managers
-    if hasattr(user, 'manager_profile'):
-        # Home: Unread reports
-        response_data['home'] = ManagerNotification.objects.filter(
-            manager=user,
-            report__isnull=False,
-            is_read=False
-        ).count()
-        
-        # Tasks: Pending/in-progress tasks
-        response_data['tasks'] = Task.objects.filter(
-            assigned_to__manager=user,
-            status__in=['PENDING', 'IN_PROGRESS']
-        ).count()
-        
-        # Suggestions: Unread suggestions
-        response_data['suggestions'] = ManagerNotification.objects.filter(
-            manager=user,
-            suggestion__isnull=False,
-            is_read=False
-        ).count()
-    
-    # For Employees
-    elif hasattr(user, 'employee_profile'):
-        # Home: Pending/in-progress tasks
-        response_data['home'] = Task.objects.filter(
-            assigned_to__user=user,
-            status__in=['PENDING', 'IN_PROGRESS']
-        ).count()
-        
-        # Announcements: Unread announcements
-        response_data['announcements'] = Announcement.objects.filter(
-            manager=user.employee_profile.manager,
-            created_at__gt=timezone.now() - timedelta(days=7)
-        ).exclude(noted_by=user.employee_profile).count()
-    
-    return Response(response_data)
+    if hasattr(request.user, 'manager_profile'):
+        # Manager view
+        return Response({
+            'reports': ManagerNotification.objects.filter(
+                manager=request.user, 
+                is_read=False,
+                report__isnull=False
+            ).count(),
+            'tasks': 0,  # Managers don't get task notifications
+            'announcements': 0,  # Managers don't get announcement notifications
+            'suggestions': ManagerNotification.objects.filter(
+                manager=request.user, 
+                is_read=False,
+                suggestion__isnull=False
+            ).count()
+        })
+    elif hasattr(request.user, 'employee_profile'):
+        # Employee view
+        return Response({
+            'reports': Report.objects.filter(
+                employee__manager=request.user.employee_profile.manager,
+                created_at__gt=timezone.now() - timedelta(days=7),
+                noted_by__id=request.user.employee_profile.id
+            ).count(),
+            'tasks': Task.objects.filter(
+                assigned_to__user=request.user,
+                status__in=['PENDING', 'IN_PROGRESS'],
+                created_at__gt=timezone.now() - timedelta(days=7)
+            ).count(),
+            'announcements': Announcement.objects.filter(
+                manager=request.user.employee_profile.manager,
+                created_at__gt=timezone.now() - timedelta(days=7))
+                .exclude(noted_by__id=request.user.employee_profile.id)
+                .count(),
+            'suggestions': 0  # Employees don't get suggestion notifications
+        })
+    else:
+        # Fallback for unrecognized user types
+        return Response({
+            'reports': 0,
+            'tasks': 0,
+            'announcements': 0,
+            'suggestions': 0
+        })
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
@@ -353,6 +353,45 @@ class ReportViewSet(viewsets.ModelViewSet):
         report.save()
         serializer = self.get_serializer(report)
         return Response(serializer.data)
+
+
+class NotificationCountView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated, IsManager]
+
+    def get(self, request):
+        manager = request.user
+        counts = {
+            'reports': ManagerNotification.objects.filter(manager=manager, report__isnull=False, is_read=False).count(),
+            'suggestions': ManagerNotification.objects.filter(manager=manager, suggestion__isnull=False, is_read=False).count(),
+            'tasks': ManagerNotification.objects.filter(manager=manager, task__isnull=False, is_read=False).count(),
+        }
+        counts['total'] = sum(counts.values())
+        return Response(counts)
+
+
+class UnreadReportsView(generics.ListAPIView):
+    serializer_class = ManagerNotificationSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated, IsManager]
+
+    def get_queryset(self):
+        return ManagerNotification.objects.filter(
+            manager=self.request.user,
+            report__isnull=False,
+            is_read=False
+        ).select_related('report__employee').order_by('-created_at')
+
+
+class MarkNotificationReadView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated, IsManager]
+
+    def post(self, request, pk):
+        notif = get_object_or_404(ManagerNotification, pk=pk, manager=request.user)
+        notif.is_read = True
+        notif.save()
+        return Response({'detail': 'Marked as read.'})
 
 
 class SuggestionViewSet(viewsets.ModelViewSet):
@@ -540,7 +579,7 @@ class SetDailySummaryTimeView(APIView):
 class AnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = AnnouncementSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_permissions = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -557,7 +596,7 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 class EmployeeNotificationViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeNotificationSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_permissions = [IsAuthenticated]
 
     def get_queryset(self):
         if hasattr(self.request.user, 'employee_profile'):
@@ -568,7 +607,7 @@ class EmployeeNotificationViewSet(viewsets.ModelViewSet):
 class EmployeeTaskView(generics.ListAPIView):
     serializer_class = TaskSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_permissions = [IsAuthenticated]
     pagination_class = TaskPagination
 
     def get_queryset(self):
