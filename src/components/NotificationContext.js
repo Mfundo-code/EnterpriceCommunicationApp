@@ -22,7 +22,7 @@ export const NotificationProvider = ({ children }) => {
     if (!token) return;
     
     try {
-      const response = await axios.get(`${API_BASE}/notifications/counts/`, {
+      const response = await axios.get(`${API_BASE}/notifications/count/`, {
         headers: { Authorization: `Token ${token}` }
       });
       

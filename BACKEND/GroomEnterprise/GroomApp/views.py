@@ -240,34 +240,42 @@ def notification_counts(request):
             ).count()
         })
     elif hasattr(request.user, 'employee_profile'):
-        # Employee view
+           # Employee view - fixed logic
+        employee = request.user.employee_profile
+        manager = employee.manager
+        
+        # Reports created by this employee that are pending
+        reports_count = Report.objects.filter(
+            employee=employee,
+            status='PENDING'
+        ).count()
+        
+        # Tasks assigned to this employee that are not completed
+        tasks_count = Task.objects.filter(
+            assigned_to=employee,
+            status__in=['PENDING', 'IN_PROGRESS']
+        ).count()
+        
+        # Announcements from manager that employee hasn't noted
+        announcements_count = Announcement.objects.filter(
+            manager=manager
+        ).exclude(
+            noted_by=employee
+        ).count()
+        
         return Response({
-            'reports': Report.objects.filter(
-                employee__manager=request.user.employee_profile.manager,
-                created_at__gt=timezone.now() - timedelta(days=7),
-                noted_by__id=request.user.employee_profile.id
-            ).count(),
-            'tasks': Task.objects.filter(
-                assigned_to__user=request.user,
-                status__in=['PENDING', 'IN_PROGRESS'],
-                created_at__gt=timezone.now() - timedelta(days=7)
-            ).count(),
-            'announcements': Announcement.objects.filter(
-                manager=request.user.employee_profile.manager,
-                created_at__gt=timezone.now() - timedelta(days=7))
-                .exclude(noted_by__id=request.user.employee_profile.id)
-                .count(),
+            'reports': reports_count,
+            'tasks': tasks_count,
+            'announcements': announcements_count,
             'suggestions': 0  # Employees don't get suggestion notifications
         })
     else:
-        # Fallback for unrecognized user types
         return Response({
             'reports': 0,
             'tasks': 0,
             'announcements': 0,
             'suggestions': 0
         })
-
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
