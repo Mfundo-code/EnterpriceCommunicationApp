@@ -679,3 +679,48 @@ class ChangePasswordView(APIView):
         user.set_password(new_password)
         user.save()
         return Response({'message': 'Password updated successfully'})
+
+
+# views.py
+class ResetNotificationCountView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        notification_type = request.data.get('type')
+        if not notification_type:
+            return Response({'error': 'Type is required'}, status=400)
+        
+        user = request.user
+        
+        # For manager notifications
+        if hasattr(user, 'manager_profile'):
+            if notification_type == 'reports':
+                ManagerNotification.objects.filter(
+                    manager=user, 
+                    report__isnull=False,
+                    is_read=False
+                ).update(is_read=True)
+            elif notification_type == 'suggestions':
+                ManagerNotification.objects.filter(
+                    manager=user, 
+                    suggestion__isnull=False,
+                    is_read=False
+                ).update(is_read=True)
+        
+        # For employee notifications
+        elif hasattr(user, 'employee_profile'):
+            employee = user.employee_profile
+            if notification_type == 'tasks':
+                Task.objects.filter(
+                    assigned_to=employee,
+                    status__in=['PENDING', 'IN_PROGRESS']
+                ).update(status='COMPLETED')
+            elif notification_type == 'announcements':
+                announcements = Announcement.objects.filter(
+                    manager=employee.manager
+                ).exclude(noted_by=employee)
+                for ann in announcements:
+                    ann.noted_by.add(employee)
+
+        return Response({'detail': 'Notification count reset'})

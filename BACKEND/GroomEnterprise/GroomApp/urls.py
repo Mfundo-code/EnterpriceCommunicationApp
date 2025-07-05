@@ -8,6 +8,7 @@ from .views import (
     EmployeeViewSet,
     ReportViewSet,
     notification_counts, 
+    ResetNotificationCountView,
     UnreadReportsView,
     MarkNotificationReadView,
     TaskViewSet,
@@ -49,7 +50,7 @@ urlpatterns = [
     path('notifications/count/', notification_counts, name='notifications-count'),  # Changed to function view
     path('reports/unread/', UnreadReportsView.as_view(), name='reports-unread'),
     path('notifications/read/<int:pk>/', MarkNotificationReadView.as_view(), name='notification-mark-read'),
-    # Removed check_notifications endpoint
+    path('notifications/reset-count/', ResetNotificationCountView.as_view(), name='reset-notification-count'),
 
     # Report actions
     path('reports/<int:pk>/attend/', ReportViewSet.as_view({'post': 'attend'}), name='report-attend'),

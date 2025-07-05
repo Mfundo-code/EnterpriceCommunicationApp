@@ -1,5 +1,4 @@
-// src/components/NotificationContext.js
-import React, { createContext, useRef, useState, useContext, useEffect } from 'react';
+import React, { createContext, useRef, useState, useContext, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../App';
 
@@ -37,6 +36,30 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
+  const resetNotification = useCallback(async (type) => {
+    try {
+      // Optimistically update the UI
+      setNotificationCounts(prev => ({
+        ...prev,
+        [type]: 0
+      }));
+      
+      // Call backend to reset the notification count
+      await axios.post(
+        `${API_BASE}/notifications/reset-count/`,
+        { type },
+        { headers: { Authorization: `Token ${token}` } }
+      );
+      
+      // Refresh counts to ensure consistency
+      fetchNotificationCounts();
+    } catch (error) {
+      console.error('Failed to reset notification count:', error);
+      // Revert optimistic update on failure
+      fetchNotificationCounts();
+    }
+  }, [token]);
+
   useEffect(() => {
     if (token) {
       // Fetch immediately on token change
@@ -52,13 +75,6 @@ export const NotificationProvider = ({ children }) => {
       }
     };
   }, [token]);
-
-  const resetNotification = (type) => {
-    setNotificationCounts(prev => ({
-      ...prev,
-      [type]: 0
-    }));
-  };
 
   return (
     <NotificationContext.Provider
