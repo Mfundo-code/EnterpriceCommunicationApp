@@ -202,67 +202,22 @@ class LogoutView(APIView):
     def post(self, request):
         request.auth.delete()
         return Response({'message': 'Logged out successfully'})
-    
-class ReportViewSet(viewsets.ModelViewSet):
-    serializer_class = ReportSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'employee_profile'):
-            return Report.objects.filter(employee=user.employee_profile).order_by('-created_at')
-        elif hasattr(user, 'manager_profile'):
-            return Report.objects.filter(employee__manager=user).order_by('-created_at')
-        return Report.objects.none()
 
-    def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_user(request):
+    data = {
+        'id': request.user.id, 
+        'username': request.user.username,
+        'is_manager': hasattr(request.user, 'manager_profile'),
+        'is_employee': hasattr(request.user, 'employee_profile'),
+    }
 
-    def perform_create(self, serializer):
-        if not hasattr(self.request.user, 'employee_profile'):
-            raise PermissionDenied("Only employees can create reports")
+    if hasattr(request.user, 'employee_profile'):
+        data['employee_profile_id'] = request.user.employee_profile.id
 
-        report = serializer.save(employee=self.request.user.employee_profile)
-        manager = report.employee.manager
-        
-        # Create manager notification (existing logic)
-        ManagerNotification.objects.create(
-            manager=manager,
-            report=report,
-            is_read=False
-        )
-        
-        # NEW: Create notifications for all employees under this manager
-        employees = Employee.objects.filter(manager=manager).exclude(id=report.employee.id)
-        for employee in employees:
-            EmployeeNotification.objects.create(
-                employee=employee,
-                report=report,
-                message=f"New report from {report.employee.first_name}",
-                is_read=False
-            )
-
-    @action(detail=True, methods=['post'])
-    def attend(self, request, pk=None):
-        report = self.get_object()
-        report.status = 'ATTENDED'
-        report.attended_by = request.user
-        report.attended_at = timezone.now()
-        report.save()
-        
-        response_data = self.get_serializer(report).data
-        response_data['attended_by_id'] = request.user.id
-        return Response(response_data)
-
-    @action(detail=True, methods=['post'])
-    def resolve(self, request, pk=None):
-        report = self.get_object()
-        report.status = 'RESOLVED'
-        report.resolved_at = timezone.now()
-        report.save()
-        serializer = self.get_serializer(report)
-        return Response(serializer.data)
+    return Response(data)
 
 
 @api_view(['GET'])
@@ -291,7 +246,7 @@ def notification_counts(request):
             manager=manager, 
             suggestion__isnull=False,
             is_read=False
-        ).count()
+            ).count()
         
         return Response({
             'reports': reports_count,
@@ -304,20 +259,20 @@ def notification_counts(request):
         employee = request.user.employee_profile
         manager = employee.manager
         
-        # UPDATED: Reports count now includes notifications from other employees
-        reports_count = EmployeeNotification.objects.filter(
+        # Reports: count pending reports since last seen
+        reports_count = Report.objects.filter(
             employee=employee,
-            report__isnull=False,
-            is_read=False
+            status='PENDING',
+            created_at__gt=employee.last_seen_reports if employee.last_seen_reports else timezone.now()
         ).count()
         
-        # Existing tasks count logic
+        # Tasks: count pending tasks
         tasks_count = Task.objects.filter(
             assigned_to=employee,
             status__in=['PENDING', 'IN_PROGRESS']
         ).count()
         
-        # Existing announcements count logic
+        # Announcements: count unread announcements
         announcements_count = Announcement.objects.filter(
             manager=manager
         ).exclude(
@@ -337,7 +292,6 @@ def notification_counts(request):
         'announcements': 0,
         'suggestions': 0
     })
-
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
@@ -374,6 +328,55 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         response_data = serializer.data
         response_data['temporary_password'] = password
         return Response(response_data, status=status.HTTP_201_CREATED)
+
+
+class ReportViewSet(viewsets.ModelViewSet):
+    serializer_class = ReportSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'employee_profile'):
+            return Report.objects.filter(employee=user.employee_profile).order_by('-created_at')
+        elif hasattr(user, 'manager_profile'):
+            return Report.objects.filter(employee__manager=user).order_by('-created_at')
+        return Report.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        if not hasattr(self.request.user, 'employee_profile'):
+            raise PermissionDenied("Only employees can create reports")
+
+        report = serializer.save(employee=self.request.user.employee_profile)
+        ManagerNotification.objects.create(
+            manager=report.employee.manager,
+            report=report,
+            is_read=False
+        )
+
+    @action(detail=True, methods=['post'])
+    def attend(self, request, pk=None):
+        report = self.get_object()
+        report.status = 'ATTENDED'
+        report.attended_by = request.user
+        report.attended_at = timezone.now()
+        report.save()
+        
+        response_data = self.get_serializer(report).data
+        response_data['attended_by_id'] = request.user.id
+        return Response(response_data)
+
+    @action(detail=True, methods=['post'])
+    def resolve(self, request, pk=None):
+        report = self.get_object()
+        report.status = 'RESOLVED'
+        report.resolved_at = timezone.now()
+        report.save()
+        serializer = self.get_serializer(report)
+        return Response(serializer.data)
 
 
 class NotificationCountView(APIView):
