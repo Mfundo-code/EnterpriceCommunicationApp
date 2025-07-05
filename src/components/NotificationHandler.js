@@ -8,16 +8,16 @@ const NotificationHandler = () => {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('state', () => {
-      // Safely retrieve the current state
       const navState = navigation.getState();
       if (!navState || !Array.isArray(navState.routes)) return;
 
       const index = navState.index;
       const currentRoute = navState.routes[index]?.name;
 
+      // Reset notifications for each screen
       if (currentRoute === 'Home') {
         resetNotification('home');
-      } else if (currentRoute === 'Reports') {
+      } else if (currentRoute === 'Tasks') {
         resetNotification('tasks');
       } else if (currentRoute === 'Announcements') {
         resetNotification('announcements');

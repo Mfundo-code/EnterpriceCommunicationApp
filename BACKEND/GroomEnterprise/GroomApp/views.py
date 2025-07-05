@@ -224,39 +224,55 @@ def current_user(request):
 @permission_classes([IsAuthenticated])
 def notification_counts(request):
     if hasattr(request.user, 'manager_profile'):
-        # Manager view
-        return Response({
-            'reports': ManagerNotification.objects.filter(
-                manager=request.user, 
-                is_read=False,
-                report__isnull=False
-            ).count(),
-            'tasks': 0,  # Managers don't get task notifications
-            'announcements': 0,  # Managers don't get announcement notifications
-            'suggestions': ManagerNotification.objects.filter(
-                manager=request.user, 
-                is_read=False,
-                suggestion__isnull=False
+        manager = request.user
+        profile = manager.manager_profile
+        
+        # Reports: count unread notifications OR reports since last seen
+        if profile.last_seen_reports:
+            reports_count = Report.objects.filter(
+                employee__manager=manager,
+                created_at__gt=profile.last_seen_reports,
+                status='PENDING'
             ).count()
+        else:
+            reports_count = ManagerNotification.objects.filter(
+                manager=manager, 
+                report__isnull=False,
+                is_read=False
+            ).count()
+            
+        # Suggestions: only count unread notifications
+        suggestions_count = ManagerNotification.objects.filter(
+            manager=manager, 
+            suggestion__isnull=False,
+            is_read=False
+        ).count()
+        
+        return Response({
+            'reports': reports_count,
+            'suggestions': suggestions_count,
+            'tasks': 0,
+            'announcements': 0
         })
+        
     elif hasattr(request.user, 'employee_profile'):
-           # Employee view - fixed logic
         employee = request.user.employee_profile
         manager = employee.manager
         
-        # Reports created by this employee that are pending
+        # Reports: count pending reports since last seen
         reports_count = Report.objects.filter(
             employee=employee,
-            status='PENDING'
+            status='PENDING',
+            created_at__gt=employee.last_seen_reports if employee.last_seen_reports else timezone.now()
         ).count()
         
-        # Tasks assigned to this employee that are not completed
+        # Tasks: count pending tasks
         tasks_count = Task.objects.filter(
             assigned_to=employee,
             status__in=['PENDING', 'IN_PROGRESS']
         ).count()
         
-        # Announcements from manager that employee hasn't noted
+        # Announcements: count unread announcements
         announcements_count = Announcement.objects.filter(
             manager=manager
         ).exclude(
@@ -267,15 +283,15 @@ def notification_counts(request):
             'reports': reports_count,
             'tasks': tasks_count,
             'announcements': announcements_count,
-            'suggestions': 0  # Employees don't get suggestion notifications
-        })
-    else:
-        return Response({
-            'reports': 0,
-            'tasks': 0,
-            'announcements': 0,
             'suggestions': 0
         })
+        
+    return Response({
+        'reports': 0,
+        'tasks': 0,
+        'announcements': 0,
+        'suggestions': 0
+    })
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
@@ -680,8 +696,6 @@ class ChangePasswordView(APIView):
         user.save()
         return Response({'message': 'Password updated successfully'})
 
-
-# views.py
 class ResetNotificationCountView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -696,12 +710,22 @@ class ResetNotificationCountView(APIView):
         # For manager notifications
         if hasattr(user, 'manager_profile'):
             if notification_type == 'reports':
-                ManagerNotification.objects.filter(
+                # Get all unread report notifications
+                notifications = ManagerNotification.objects.filter(
                     manager=user, 
                     report__isnull=False,
                     is_read=False
-                ).update(is_read=True)
+                )
+                
+                # Mark them as read
+                notifications.update(is_read=True)
+                
+                # Also update last seen timestamp for reports
+                user.manager_profile.last_seen_reports = timezone.now()
+                user.manager_profile.save()
+                
             elif notification_type == 'suggestions':
+                # Mark suggestion notifications as read
                 ManagerNotification.objects.filter(
                     manager=user, 
                     suggestion__isnull=False,
@@ -711,12 +735,20 @@ class ResetNotificationCountView(APIView):
         # For employee notifications
         elif hasattr(user, 'employee_profile'):
             employee = user.employee_profile
-            if notification_type == 'tasks':
+            if notification_type == 'reports':
+                # Update last seen timestamp for employee reports
+                employee.last_seen_reports = timezone.now()
+                employee.save()
+                
+            elif notification_type == 'tasks':
+                # Complete pending tasks
                 Task.objects.filter(
                     assigned_to=employee,
                     status__in=['PENDING', 'IN_PROGRESS']
                 ).update(status='COMPLETED')
+                
             elif notification_type == 'announcements':
+                # Mark announcements as noted
                 announcements = Announcement.objects.filter(
                     manager=employee.manager
                 ).exclude(noted_by=employee)

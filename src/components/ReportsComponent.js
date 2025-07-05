@@ -16,13 +16,11 @@ import axios from 'axios';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { AuthContext } from '../../App';
 import dayjs from 'dayjs';
-import { useNotifications } from './NotificationContext';
 
 const API_BASE = 'http://www.teamkonekt.com/api';
 
 const ReportsComponent = () => {
   const { token } = useContext(AuthContext);
-  const { incrementNotification } = useNotifications();
   const [reports, setReports] = useState([]);
   const [selectedView, setSelectedView] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -61,12 +59,6 @@ const ReportsComponent = () => {
       const data = response.data.results || response.data;
       if (!Array.isArray(data)) throw new Error('Unexpected API response format');
       setReports(data);
-      
-      // Check for new pending reports and update notification count
-      const newReports = data.filter(report => report.status === 'PENDING');
-      if (newReports.length > 0) {
-        incrementNotification('home');
-      }
     } catch (err) {
       console.error('Fetch reports error:', err);
       setError(err.response?.data?.detail || 'Failed to load reports');
@@ -98,7 +90,6 @@ const ReportsComponent = () => {
       setReports(prev => [data, ...prev]);
       setNewReport('');
       setIsFormVisible(false);
-      incrementNotification('home');
     } catch (err) {
       // Handle the case where only employees can create reports
       if (!err.response?.data?.message?.[0]?.includes('only employees can create reports')) {
