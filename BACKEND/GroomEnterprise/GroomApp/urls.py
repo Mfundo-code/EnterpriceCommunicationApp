@@ -7,6 +7,7 @@ from .views import (
     LogoutView,
     EmployeeViewSet,
     ReportViewSet,
+    ReportNotificationViewSet,
     notification_counts, 
     ResetNotificationCountView,
     UnreadReportsView,
@@ -33,6 +34,7 @@ from .views import (
 router = DefaultRouter()
 router.register(r'employees', EmployeeViewSet, basename='employee')
 router.register(r'reports', ReportViewSet, basename='report')
+router.register(r'report-notifications', ReportNotificationViewSet, basename='reportnotification')
 router.register(r'tasks', TaskViewSet, basename='task')
 router.register(r'announcements', AnnouncementViewSet, basename='announcement')
 router.register(r'employee-notifications', EmployeeNotificationViewSet, basename='employee-notification')
@@ -46,8 +48,8 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('confirm-email/', ConfirmEmailView.as_view(), name='confirm-email'),
 
-    # Notifications - UPDATED
-    path('notifications/count/', notification_counts, name='notifications-count'),  # Changed to function view
+    # Notifications
+    path('notifications/count/', notification_counts, name='notifications-count'),
     path('reports/unread/', UnreadReportsView.as_view(), name='reports-unread'),
     path('notifications/read/<int:pk>/', MarkNotificationReadView.as_view(), name='notification-mark-read'),
     path('notifications/reset-count/', ResetNotificationCountView.as_view(), name='reset-notification-count'),
@@ -55,6 +57,9 @@ urlpatterns = [
     # Report actions
     path('reports/<int:pk>/attend/', ReportViewSet.as_view({'post': 'attend'}), name='report-attend'),
     path('reports/<int:pk>/resolve/', ReportViewSet.as_view({'post': 'resolve'}), name='report-resolve'),
+
+    # Notification actions
+    path('report-notifications/<int:pk>/mark_read/', ReportNotificationViewSet.as_view({'post': 'mark_read'}), name='report-notification-mark-read'),
 
     # Tasks
     path('tasks/completed/', TaskCompletedView.as_view(), name='completed-tasks'),

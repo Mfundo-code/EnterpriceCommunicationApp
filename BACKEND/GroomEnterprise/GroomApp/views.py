@@ -13,43 +13,21 @@ from rest_framework.views import APIView
 import random
 from django.core.mail import send_mail
 from django.conf import settings
-from django.utils.dateparse import parse_datetime
+from django.db.models import Q
 
-from .models import (
-    Employee,
-    Report,
-    ManagerNotification,
-    Task,
-    Announcement,
-    Suggestion,
-    ManagerProfile,
-    EmployeeNotification,
-    EmailConfirmation,
-)
-from .serializers import (
-    ManagerSignupSerializer,
-    EmployeeSerializer,
-    ReportSerializer,
-    ManagerNotificationSerializer,
-    TaskSerializer,
-    AnnouncementSerializer,
-    SuggestionSerializer,
-    EmployeeNotificationSerializer,
-)
+from .models import *
+from .serializers import *
 
 User = get_user_model()
-
 
 class IsManager(BasePermission):
     def has_permission(self, request, view):
         return hasattr(request.user, 'manager_profile')
 
-
 class TaskPagination(pagination.PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 100
-
 
 class ManagerSignupView(generics.CreateAPIView):
     serializer_class = ManagerSignupSerializer
@@ -65,25 +43,20 @@ class ManagerSignupView(generics.CreateAPIView):
         company_name = serializer.validated_data['company_name']
         phone_number = serializer.validated_data['phone_number']
         
-        # Create user but mark as inactive
         user = User.objects.create_user(
             username=username,
             email=email,
             password=password,
-            is_active=False  # Inactive until email confirmed
+            is_active=False
         )
         
-        # Create manager profile
         manager_profile = ManagerProfile.objects.create(
             user=user,
             company_name=company_name,
             phone_number=phone_number
         )
         
-        # Generate confirmation code (6 digits)
         confirmation_code = str(random.randint(100000, 999999))
-        
-        # Create confirmation record (valid for 24 hours)
         expires_at = timezone.now() + timedelta(hours=24)
         EmailConfirmation.objects.create(
             user=user,
@@ -91,7 +64,6 @@ class ManagerSignupView(generics.CreateAPIView):
             expires_at=expires_at
         )
         
-        # Send email with confirmation code
         try:
             send_mail(
                 subject='Confirm Your Email for TeamKonekt',
@@ -102,8 +74,7 @@ class ManagerSignupView(generics.CreateAPIView):
                 fail_silently=False,
             )
         except Exception as e:
-            # Handle email sending failure
-            user.delete()  # Clean up user record
+            user.delete()
             return Response(
                 {'error': f'Failed to send confirmation email: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -113,7 +84,6 @@ class ManagerSignupView(generics.CreateAPIView):
             'message': 'Confirmation code sent to your email',
             'user_id': user.id
         }, status=status.HTTP_201_CREATED)
-
 
 class ConfirmEmailView(APIView):
     permission_classes = [AllowAny]
@@ -141,17 +111,14 @@ class ConfirmEmailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Activate user
         user = confirmation.user
         user.is_active = True
         user.save()
         
-        # Mark confirmation as used
         confirmation.is_used = True
         confirmation.save()
         
         return Response({'message': 'Email confirmed successfully'})
-
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -165,7 +132,6 @@ class LoginView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Check if user is active
         if not user.is_active:
             return Response(
                 {'error': 'Account not activated. Please confirm your email.'},
@@ -194,7 +160,6 @@ class LoginView(APIView):
             })
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-
 class LogoutView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -202,7 +167,6 @@ class LogoutView(APIView):
     def post(self, request):
         request.auth.delete()
         return Response({'message': 'Logged out successfully'})
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -219,7 +183,6 @@ def current_user(request):
 
     return Response(data)
 
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def notification_counts(request):
@@ -227,26 +190,18 @@ def notification_counts(request):
         manager = request.user
         profile = manager.manager_profile
         
-        # Reports: count unread notifications OR reports since last seen
-        if profile.last_seen_reports:
-            reports_count = Report.objects.filter(
-                employee__manager=manager,
-                created_at__gt=profile.last_seen_reports,
-                status='PENDING'
-            ).count()
-        else:
-            reports_count = ManagerNotification.objects.filter(
-                manager=manager, 
-                report__isnull=False,
-                is_read=False
-            ).count()
+        # Reports: count unread notifications
+        reports_count = ReportNotification.objects.filter(
+            recipient=manager,
+            is_read=False
+        ).count()
             
         # Suggestions: only count unread notifications
         suggestions_count = ManagerNotification.objects.filter(
             manager=manager, 
             suggestion__isnull=False,
             is_read=False
-            ).count()
+        ).count()
         
         return Response({
             'reports': reports_count,
@@ -257,13 +212,11 @@ def notification_counts(request):
         
     elif hasattr(request.user, 'employee_profile'):
         employee = request.user.employee_profile
-        manager = employee.manager
         
-        # Reports: count pending reports since last seen
-        reports_count = Report.objects.filter(
-            employee=employee,
-            status='PENDING',
-            created_at__gt=employee.last_seen_reports if employee.last_seen_reports else timezone.now()
+        # Reports: count unread notifications
+        reports_count = ReportNotification.objects.filter(
+            recipient=request.user,
+            is_read=False
         ).count()
         
         # Tasks: count pending tasks
@@ -274,7 +227,7 @@ def notification_counts(request):
         
         # Announcements: count unread announcements
         announcements_count = Announcement.objects.filter(
-            manager=manager
+            manager=employee.manager
         ).exclude(
             noted_by=employee
         ).count()
@@ -329,7 +282,6 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         response_data['temporary_password'] = password
         return Response(response_data, status=status.HTTP_201_CREATED)
 
-
 class ReportViewSet(viewsets.ModelViewSet):
     serializer_class = ReportSerializer
     authentication_classes = [TokenAuthentication]
@@ -337,25 +289,42 @@ class ReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'employee_profile'):
-            return Report.objects.filter(employee=user.employee_profile).order_by('-created_at')
-        elif hasattr(user, 'manager_profile'):
-            return Report.objects.filter(employee__manager=user).order_by('-created_at')
-        return Report.objects.none()
+        return Report.objects.filter(
+            Q(sender=user) | 
+            Q(recipient=user) | 
+            Q(employee_recipient__user=user)
+        ).distinct().order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
-
-    def perform_create(self, serializer):
-        if not hasattr(self.request.user, 'employee_profile'):
-            raise PermissionDenied("Only employees can create reports")
-
-        report = serializer.save(employee=self.request.user.employee_profile)
-        ManagerNotification.objects.create(
-            manager=report.employee.manager,
-            report=report,
-            is_read=False
-        )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        report = serializer.save(sender=request.user)
+        
+        # Determine recipient user
+        recipient_user = None
+        if report.recipient:
+            recipient_user = report.recipient
+        elif report.employee_recipient:
+            recipient_user = report.employee_recipient.user
+        
+        # Create notification
+        if recipient_user:
+            ReportNotification.objects.create(
+                report=report,
+                recipient=recipient_user,
+                is_read=False
+            )
+            
+            # Also create employee notification if recipient is employee
+            if hasattr(recipient_user, 'employee_profile'):
+                EmployeeNotification.objects.create(
+                    employee=recipient_user.employee_profile,
+                    report=report,
+                    message=f"New report from {report.sender.first_name}",
+                    is_read=False
+                )
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
     def attend(self, request, pk=None):
@@ -365,9 +334,14 @@ class ReportViewSet(viewsets.ModelViewSet):
         report.attended_at = timezone.now()
         report.save()
         
-        response_data = self.get_serializer(report).data
-        response_data['attended_by_id'] = request.user.id
-        return Response(response_data)
+        # Create notification for sender
+        ReportNotification.objects.create(
+            report=report,
+            recipient=report.sender,
+            is_read=False
+        )
+        
+        return Response(self.get_serializer(report).data)
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
@@ -375,9 +349,32 @@ class ReportViewSet(viewsets.ModelViewSet):
         report.status = 'RESOLVED'
         report.resolved_at = timezone.now()
         report.save()
-        serializer = self.get_serializer(report)
-        return Response(serializer.data)
+        
+        # Create notification for sender
+        ReportNotification.objects.create(
+            report=report,
+            recipient=report.sender,
+            is_read=False
+        )
+        
+        return Response(self.get_serializer(report).data)
 
+class ReportNotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = ReportNotificationSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ReportNotification.objects.filter(
+            recipient=self.request.user
+        ).order_by('-created_at')
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save()
+        return Response({'status': 'marked as read'})
 
 class NotificationCountView(APIView):
     authentication_classes = [TokenAuthentication]
@@ -386,37 +383,33 @@ class NotificationCountView(APIView):
     def get(self, request):
         manager = request.user
         counts = {
-            'reports': ManagerNotification.objects.filter(manager=manager, report__isnull=False, is_read=False).count(),
+            'reports': ReportNotification.objects.filter(recipient=manager, is_read=False).count(),
             'suggestions': ManagerNotification.objects.filter(manager=manager, suggestion__isnull=False, is_read=False).count(),
             'tasks': ManagerNotification.objects.filter(manager=manager, task__isnull=False, is_read=False).count(),
         }
         counts['total'] = sum(counts.values())
         return Response(counts)
 
-
 class UnreadReportsView(generics.ListAPIView):
-    serializer_class = ManagerNotificationSerializer
+    serializer_class = ReportNotificationSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return ManagerNotification.objects.filter(
-            manager=self.request.user,
-            report__isnull=False,
+        return ReportNotification.objects.filter(
+            recipient=self.request.user,
             is_read=False
-        ).select_related('report__employee').order_by('-created_at')
-
+        ).select_related('report').order_by('-created_at')
 
 class MarkNotificationReadView(APIView):
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        notif = get_object_or_404(ManagerNotification, pk=pk, manager=request.user)
+        notif = get_object_or_404(ReportNotification, pk=pk, recipient=request.user)
         notif.is_read = True
         notif.save()
         return Response({'detail': 'Marked as read.'})
-
 
 class SuggestionViewSet(viewsets.ModelViewSet):
     serializer_class = SuggestionSerializer
@@ -462,7 +455,6 @@ class SuggestionViewSet(viewsets.ModelViewSet):
         else:
             raise PermissionDenied("Only employees can create suggestions")
 
-
 class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
     authentication_classes = [TokenAuthentication]
@@ -507,7 +499,6 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         return super().update(request, *args, **kwargs)
 
-
 class TaskCompletedView(generics.ListAPIView):
     serializer_class = TaskSerializer
     authentication_classes = [TokenAuthentication]
@@ -520,7 +511,6 @@ class TaskCompletedView(generics.ListAPIView):
             assigned_to__manager=self.request.user
         ).order_by('-created_at')
 
-
 class TaskPendingView(generics.ListAPIView):
     serializer_class = TaskSerializer
     authentication_classes = [TokenAuthentication]
@@ -532,7 +522,6 @@ class TaskPendingView(generics.ListAPIView):
             status__in=['PENDING', 'IN_PROGRESS'],
             assigned_to__manager=self.request.user
         ).order_by('-created_at')
-
 
 class TaskOverdueView(generics.ListAPIView):
     serializer_class = TaskSerializer
@@ -547,7 +536,6 @@ class TaskOverdueView(generics.ListAPIView):
             status__in=['PENDING', 'IN_PROGRESS'],
             assigned_to__manager=self.request.user
         ).order_by('-created_at')
-
 
 class TaskDuePeriodView(generics.ListAPIView):
     serializer_class = TaskSerializer
@@ -569,7 +557,6 @@ class TaskDuePeriodView(generics.ListAPIView):
             return Task.objects.filter(due_date__year=today.year, due_date__month=today.month).order_by('-created_at')
         return Task.objects.none()
 
-
 class SendTaskReminderView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated, IsManager]
@@ -585,7 +572,6 @@ class SendTaskReminderView(APIView):
             )
         return Response({'detail': 'Reminders sent successfully.'})
 
-
 class SetDailySummaryTimeView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated, IsManager]
@@ -598,7 +584,6 @@ class SetDailySummaryTimeView(APIView):
         manager_profile.daily_summary_time = time_str
         manager_profile.save()
         return Response({'detail': 'Daily summary time updated successfully.'})
-
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = AnnouncementSerializer
@@ -616,7 +601,6 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only managers can create announcements")
         serializer.save(manager=self.request.user)
 
-
 class EmployeeNotificationViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeNotificationSerializer
     authentication_classes = [TokenAuthentication]
@@ -626,7 +610,6 @@ class EmployeeNotificationViewSet(viewsets.ModelViewSet):
         if hasattr(self.request.user, 'employee_profile'):
             return EmployeeNotification.objects.filter(employee=self.request.user.employee_profile).order_by('-created_at')
         return EmployeeNotification.objects.none()
-
 
 class EmployeeTaskView(generics.ListAPIView):
     serializer_class = TaskSerializer
@@ -648,7 +631,6 @@ class EmployeeTaskView(generics.ListAPIView):
             return qs.filter(status='COMPLETED')
         return qs
 
-
 class MarkAnnouncementNotedView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -662,7 +644,6 @@ class MarkAnnouncementNotedView(APIView):
         
         announcement.noted_by.add(employee)
         return Response({'detail': 'Marked as noted'}, status=status.HTTP_200_OK)
-
 
 class NotedEmployeesView(generics.ListAPIView):
     serializer_class = EmployeeSerializer
@@ -710,19 +691,11 @@ class ResetNotificationCountView(APIView):
         # For manager notifications
         if hasattr(user, 'manager_profile'):
             if notification_type == 'reports':
-                # Get all unread report notifications
-                notifications = ManagerNotification.objects.filter(
-                    manager=user, 
-                    report__isnull=False,
+                # Mark report notifications as read
+                ReportNotification.objects.filter(
+                    recipient=user, 
                     is_read=False
-                )
-                
-                # Mark them as read
-                notifications.update(is_read=True)
-                
-                # Also update last seen timestamp for reports
-                user.manager_profile.last_seen_reports = timezone.now()
-                user.manager_profile.save()
+                ).update(is_read=True)
                 
             elif notification_type == 'suggestions':
                 # Mark suggestion notifications as read
@@ -736,9 +709,11 @@ class ResetNotificationCountView(APIView):
         elif hasattr(user, 'employee_profile'):
             employee = user.employee_profile
             if notification_type == 'reports':
-                # Update last seen timestamp for employee reports
-                employee.last_seen_reports = timezone.now()
-                employee.save()
+                # Mark report notifications as read
+                ReportNotification.objects.filter(
+                    recipient=user,
+                    is_read=False
+                ).update(is_read=True)
                 
             elif notification_type == 'tasks':
                 # Complete pending tasks
