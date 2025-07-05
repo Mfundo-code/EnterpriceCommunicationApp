@@ -227,7 +227,7 @@ def notification_counts(request):
         manager = request.user
         profile = manager.manager_profile
         
-        # Reports: count unread notifications OR reports since last seen
+        # Reports: count pending reports since last seen
         if profile.last_seen_reports:
             reports_count = Report.objects.filter(
                 employee__manager=manager,
@@ -235,10 +235,9 @@ def notification_counts(request):
                 status='PENDING'
             ).count()
         else:
-            reports_count = ManagerNotification.objects.filter(
-                manager=manager, 
-                report__isnull=False,
-                is_read=False
+            reports_count = Report.objects.filter(
+                employee__manager=manager,
+                status='PENDING'
             ).count()
             
         # Suggestions: only count unread notifications
@@ -246,7 +245,7 @@ def notification_counts(request):
             manager=manager, 
             suggestion__isnull=False,
             is_read=False
-            ).count()
+        ).count()
         
         return Response({
             'reports': reports_count,
@@ -259,12 +258,18 @@ def notification_counts(request):
         employee = request.user.employee_profile
         manager = employee.manager
         
-        # Reports: count pending reports since last seen
-        reports_count = Report.objects.filter(
-            employee=employee,
-            status='PENDING',
-            created_at__gt=employee.last_seen_reports if employee.last_seen_reports else timezone.now()
-        ).count()
+        # Reports: count pending reports in the entire company
+        if employee.last_seen_reports:
+            reports_count = Report.objects.filter(
+                employee__manager=manager,
+                status='PENDING',
+                created_at__gt=employee.last_seen_reports
+            ).count()
+        else:
+            reports_count = Report.objects.filter(
+                employee__manager=manager,
+                status='PENDING'
+            ).count()
         
         # Tasks: count pending tasks
         tasks_count = Task.objects.filter(
@@ -279,19 +284,27 @@ def notification_counts(request):
             noted_by=employee
         ).count()
         
+        # Employee notifications
+        notifications_count = EmployeeNotification.objects.filter(
+            employee=employee,
+            is_read=False
+        ).count()
+        
         return Response({
             'reports': reports_count,
             'tasks': tasks_count,
             'announcements': announcements_count,
-            'suggestions': 0
+            'notifications': notifications_count
         })
         
     return Response({
         'reports': 0,
         'tasks': 0,
         'announcements': 0,
-        'suggestions': 0
+        'suggestions': 0,
+        'notifications': 0
     })
+
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
@@ -337,11 +350,16 @@ class ReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        # Get the company manager
         if hasattr(user, 'employee_profile'):
-            return Report.objects.filter(employee=user.employee_profile).order_by('-created_at')
+            manager = user.employee_profile.manager
         elif hasattr(user, 'manager_profile'):
-            return Report.objects.filter(employee__manager=user).order_by('-created_at')
-        return Report.objects.none()
+            manager = user
+        else:
+            return Report.objects.none()
+        
+        # Return all reports from the same company
+        return Report.objects.filter(employee__manager=manager).order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
@@ -351,8 +369,22 @@ class ReportViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only employees can create reports")
 
         report = serializer.save(employee=self.request.user.employee_profile)
+        
+        # Notify everyone in the company
+        manager = report.employee.manager
+        employees = Employee.objects.filter(manager=manager)
+        
+        # Create notifications for all employees
+        for employee in employees:
+            EmployeeNotification.objects.create(
+                employee=employee,
+                message=f"New report: {report.message[:50]}...",
+                is_read=False
+            )
+        
+        # Also notify the manager
         ManagerNotification.objects.create(
-            manager=report.employee.manager,
+            manager=manager,
             report=report,
             is_read=False
         )
@@ -365,8 +397,18 @@ class ReportViewSet(viewsets.ModelViewSet):
         report.attended_at = timezone.now()
         report.save()
         
+        # Notify everyone about the attendance
+        manager = report.employee.manager
+        employees = Employee.objects.filter(manager=manager)
+        
+        for employee in employees:
+            EmployeeNotification.objects.create(
+                employee=employee,
+                message=f"Report attended by {request.user.get_full_name()}",
+                is_read=False
+            )
+        
         response_data = self.get_serializer(report).data
-        response_data['attended_by_id'] = request.user.id
         return Response(response_data)
 
     @action(detail=True, methods=['post'])
@@ -375,6 +417,18 @@ class ReportViewSet(viewsets.ModelViewSet):
         report.status = 'RESOLVED'
         report.resolved_at = timezone.now()
         report.save()
+        
+        # Notify everyone about the resolution
+        manager = report.employee.manager
+        employees = Employee.objects.filter(manager=manager)
+        
+        for employee in employees:
+            EmployeeNotification.objects.create(
+                employee=employee,
+                message=f"Report resolved: {report.message[:50]}...",
+                is_read=False
+            )
+        
         serializer = self.get_serializer(report)
         return Response(serializer.data)
 

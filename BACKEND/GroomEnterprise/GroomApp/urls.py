@@ -27,7 +27,6 @@ from .views import (
     NotedEmployeesView,
     current_user,
     ConfirmEmailView,
-   
 )
 
 router = DefaultRouter()

@@ -22,7 +22,6 @@ class ManagerProfile(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name='manager_profile'
-        
     )
     company_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=15)
@@ -51,6 +50,7 @@ class Employee(models.Model):
     role = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=15)
     last_seen_reports = models.DateTimeField(null=True, blank=True)
+    
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.role})"
     
