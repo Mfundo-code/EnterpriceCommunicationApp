@@ -27,6 +27,8 @@ from .views import (
     NotedEmployeesView,
     current_user,
     ConfirmEmailView,
+    mark_report_seen,
+    mark_all_reports_seen
 )
 
 router = DefaultRouter()
@@ -45,11 +47,15 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('confirm-email/', ConfirmEmailView.as_view(), name='confirm-email'),
 
-    # Notifications - UPDATED
-    path('notifications/count/', notification_counts, name='notifications-count'),  # Changed to function view
+    # Notifications
+    path('notifications/count/', notification_counts, name='notifications-count'),
     path('reports/unread/', UnreadReportsView.as_view(), name='reports-unread'),
     path('notifications/read/<int:pk>/', MarkNotificationReadView.as_view(), name='notification-mark-read'),
     path('notifications/reset-count/', ResetNotificationCountView.as_view(), name='reset-notification-count'),
+    
+    # Report seen endpoints
+    path('reports/mark-seen/<int:report_id>/', mark_report_seen, name='mark-report-seen'),
+    path('reports/mark-all-seen/', mark_all_reports_seen, name='mark-all-reports-seen'),
 
     # Report actions
     path('reports/<int:pk>/attend/', ReportViewSet.as_view({'post': 'attend'}), name='report-attend'),

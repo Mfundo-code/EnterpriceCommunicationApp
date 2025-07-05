@@ -26,7 +26,6 @@ class ManagerProfile(models.Model):
     company_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=15)
     daily_summary_time = models.TimeField(null=True, blank=True)
-    last_seen_reports = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.company_name}"
@@ -49,8 +48,7 @@ class Employee(models.Model):
     email = models.EmailField(unique=False)
     role = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=15)
-    last_seen_reports = models.DateTimeField(null=True, blank=True)
-    
+
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.role})"
     
@@ -89,6 +87,23 @@ class Report(models.Model):
 
     def __str__(self):
         return f"Report from {self.employee} - {self.created_at} ({self.get_status_display()})"
+
+
+class ReportSeen(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='seen_reports'
+    )
+    report = models.ForeignKey(
+        Report,
+        on_delete=models.CASCADE,
+        related_name='seen_by'
+    )
+    seen_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'report')
 
 
 class Suggestion(models.Model):
