@@ -219,6 +219,80 @@ def current_user(request):
 
     return Response(data)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def notification_counts(request):
+    if hasattr(request.user, 'manager_profile'):
+        manager = request.user
+        profile = manager.manager_profile
+        
+        # Reports: count unread notifications OR reports since last seen
+        if profile.last_seen_reports:
+            reports_count = Report.objects.filter(
+                employee__manager=manager,
+                created_at__gt=profile.last_seen_reports,
+                status='PENDING'
+            ).count()
+        else:
+            reports_count = ManagerNotification.objects.filter(
+                manager=manager, 
+                report__isnull=False,
+                is_read=False
+            ).count()
+            
+        # Suggestions: only count unread notifications
+        suggestions_count = ManagerNotification.objects.filter(
+            manager=manager, 
+            suggestion__isnull=False,
+            is_read=False
+            ).count()
+        
+        return Response({
+            'reports': reports_count,
+            'suggestions': suggestions_count,
+            'tasks': 0,
+            'announcements': 0
+        })
+        
+    elif hasattr(request.user, 'employee_profile'):
+        employee = request.user.employee_profile
+        manager = employee.manager
+        
+        # Reports: count pending reports since last seen
+        reports_count = Report.objects.filter(
+            employee=employee,
+            status='PENDING',
+            created_at__gt=employee.last_seen_reports if employee.last_seen_reports else timezone.now()
+        ).count()
+        
+        # Tasks: count pending tasks
+        tasks_count = Task.objects.filter(
+            assigned_to=employee,
+            status__in=['PENDING', 'IN_PROGRESS']
+        ).count()
+        
+        # Announcements: count unread announcements
+        announcements_count = Announcement.objects.filter(
+            manager=manager
+        ).exclude(
+            noted_by=employee
+        ).count()
+        
+        return Response({
+            'reports': reports_count,
+            'tasks': tasks_count,
+            'announcements': announcements_count,
+            'suggestions': 0
+        })
+        
+    return Response({
+        'reports': 0,
+        'tasks': 0,
+        'announcements': 0,
+        'suggestions': 0
+    })
+
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
@@ -263,16 +337,11 @@ class ReportViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        # Get the company manager
         if hasattr(user, 'employee_profile'):
-            manager = user.employee_profile.manager
+            return Report.objects.filter(employee=user.employee_profile).order_by('-created_at')
         elif hasattr(user, 'manager_profile'):
-            manager = user
-        else:
-            return Report.objects.none()
-        
-        # Return all reports from the same company
-        return Report.objects.filter(employee__manager=manager).order_by('-created_at')
+            return Report.objects.filter(employee__manager=user).order_by('-created_at')
+        return Report.objects.none()
 
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
@@ -282,22 +351,8 @@ class ReportViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only employees can create reports")
 
         report = serializer.save(employee=self.request.user.employee_profile)
-        
-        # Notify everyone in the company
-        manager = report.employee.manager
-        employees = Employee.objects.filter(manager=manager)
-        
-        # Create notifications for all employees
-        for employee in employees:
-            EmployeeNotification.objects.create(
-                employee=employee,
-                message=f"New report: {report.message[:50]}...",
-                is_read=False
-            )
-        
-        # Also notify the manager
         ManagerNotification.objects.create(
-            manager=manager,
+            manager=report.employee.manager,
             report=report,
             is_read=False
         )
@@ -310,18 +365,8 @@ class ReportViewSet(viewsets.ModelViewSet):
         report.attended_at = timezone.now()
         report.save()
         
-        # Notify everyone about the attendance
-        manager = report.employee.manager
-        employees = Employee.objects.filter(manager=manager)
-        
-        for employee in employees:
-            EmployeeNotification.objects.create(
-                employee=employee,
-                message=f"Report attended by {request.user.get_full_name()}",
-                is_read=False
-            )
-        
         response_data = self.get_serializer(report).data
+        response_data['attended_by_id'] = request.user.id
         return Response(response_data)
 
     @action(detail=True, methods=['post'])
@@ -330,18 +375,6 @@ class ReportViewSet(viewsets.ModelViewSet):
         report.status = 'RESOLVED'
         report.resolved_at = timezone.now()
         report.save()
-        
-        # Notify everyone about the resolution
-        manager = report.employee.manager
-        employees = Employee.objects.filter(manager=manager)
-        
-        for employee in employees:
-            EmployeeNotification.objects.create(
-                employee=employee,
-                message=f"Report resolved: {report.message[:50]}...",
-                is_read=False
-            )
-        
         serializer = self.get_serializer(report)
         return Response(serializer.data)
 
@@ -663,83 +696,6 @@ class ChangePasswordView(APIView):
         user.save()
         return Response({'message': 'Password updated successfully'})
 
-# views.py
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def notification_counts(request):
-    if hasattr(request.user, 'manager_profile'):
-        manager = request.user
-        
-        # Count unread report notifications
-        reports_count = ManagerNotification.objects.filter(
-            manager=manager, 
-            report__isnull=False,
-            is_read=False
-        ).count()
-        
-        # Suggestions: count unread notifications (unchanged)
-        suggestions_count = ManagerNotification.objects.filter(
-            manager=manager, 
-            suggestion__isnull=False,
-            is_read=False
-        ).count()
-        
-        return Response({
-            'reports': reports_count,
-            'suggestions': suggestions_count,
-            'tasks': 0,
-            'announcements': 0
-        })
-        
-    elif hasattr(request.user, 'employee_profile'):
-        employee = request.user.employee_profile
-        manager = employee.manager
-        
-        # Reports: count unread notifications (unchanged)
-        reports_count = Report.objects.filter(
-            employee__manager=manager,
-            status='PENDING',
-            created_at__gt=employee.last_seen_reports
-        ).count() if employee.last_seen_reports else Report.objects.filter(
-            employee__manager=manager,
-            status='PENDING'
-        ).count()
-        
-        # Tasks: count pending tasks (unchanged)
-        tasks_count = Task.objects.filter(
-            assigned_to=employee,
-            status__in=['PENDING', 'IN_PROGRESS']
-        ).count()
-        
-        # Announcements: count unread announcements (unchanged)
-        announcements_count = Announcement.objects.filter(
-            manager=manager
-        ).exclude(
-            noted_by=employee
-        ).count()
-        
-        # Employee notifications (unchanged)
-        notifications_count = EmployeeNotification.objects.filter(
-            employee=employee,
-            is_read=False
-        ).count()
-        
-        return Response({
-            'reports': reports_count,
-            'tasks': tasks_count,
-            'announcements': announcements_count,
-            'notifications': notifications_count
-        })
-        
-    return Response({
-        'reports': 0,
-        'tasks': 0,
-        'announcements': 0,
-        'suggestions': 0,
-        'notifications': 0
-    })
-
-
 class ResetNotificationCountView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -764,15 +720,19 @@ class ResetNotificationCountView(APIView):
                 # Mark them as read
                 notifications.update(is_read=True)
                 
+                # Also update last seen timestamp for reports
+                user.manager_profile.last_seen_reports = timezone.now()
+                user.manager_profile.save()
+                
             elif notification_type == 'suggestions':
-                # Mark suggestion notifications as read (unchanged)
+                # Mark suggestion notifications as read
                 ManagerNotification.objects.filter(
                     manager=user, 
                     suggestion__isnull=False,
                     is_read=False
                 ).update(is_read=True)
         
-        # For employee notifications (unchanged)
+        # For employee notifications
         elif hasattr(user, 'employee_profile'):
             employee = user.employee_profile
             if notification_type == 'reports':
@@ -781,14 +741,14 @@ class ResetNotificationCountView(APIView):
                 employee.save()
                 
             elif notification_type == 'tasks':
-                # Complete pending tasks (unchanged)
+                # Complete pending tasks
                 Task.objects.filter(
                     assigned_to=employee,
                     status__in=['PENDING', 'IN_PROGRESS']
                 ).update(status='COMPLETED')
                 
             elif notification_type == 'announcements':
-                # Mark announcements as noted (unchanged)
+                # Mark announcements as noted
                 announcements = Announcement.objects.filter(
                     manager=employee.manager
                 ).exclude(noted_by=employee)
