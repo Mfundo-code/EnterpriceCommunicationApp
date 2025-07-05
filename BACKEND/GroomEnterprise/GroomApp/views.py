@@ -795,6 +795,7 @@ class ChangePasswordView(APIView):
         user.save()
         return Response({'message': 'Password updated successfully'})
 
+# views.py
 class ResetNotificationCountView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -820,11 +821,12 @@ class ResetNotificationCountView(APIView):
         elif hasattr(user, 'employee_profile'):
             employee = user.employee_profile
             if notification_type == 'tasks':
-                # Complete pending tasks
-                Task.objects.filter(
-                    assigned_to=employee,
-                    status__in=['PENDING', 'IN_PROGRESS']
-                ).update(status='COMPLETED')
+                # Mark task notifications as read ✅ Fixed
+                EmployeeNotification.objects.filter(
+                    employee=employee,
+                    task__isnull=False,
+                    is_read=False
+                ).update(is_read=True)
                 
             elif notification_type == 'announcements':
                 # Mark announcements as noted

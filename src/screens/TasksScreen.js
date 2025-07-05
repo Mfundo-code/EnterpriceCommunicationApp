@@ -1,3 +1,4 @@
+// TaskScreen.js
 import React, { useContext } from 'react';
 import MainLayout from '../components/MainLayout';
 import { AuthContext } from '../../App';
@@ -6,14 +7,13 @@ import EmployeeTasksComponent from '../components/EmployeeComponent/EmployeeTask
 import { useNotifications } from '../components/NotificationContext';
 import { useFocusEffect } from '@react-navigation/native';
 
-const ReportsScreen = () => {
+const TaskScreen = () => {
   const { userType } = useContext(AuthContext);
   const { resetNotification } = useNotifications();
 
   useFocusEffect(
     React.useCallback(() => {
       resetNotification('tasks');
-      return () => {}; // Optional cleanup function
     }, [resetNotification])
   );
 
@@ -28,4 +28,4 @@ const ReportsScreen = () => {
   );
 };
 
-export default ReportsScreen;
+export default TaskScreen;

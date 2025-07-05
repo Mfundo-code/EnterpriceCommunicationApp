@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
@@ -99,6 +98,12 @@ const ManagerTasksComponent = () => {
   const [dueDateText, setDueDateText] = useState(newTask.due_date.format('YYYY-MM-DD'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // Calculate badge counts for pending and overdue only
+  const pendingCount = tasks.filter(t => t.status === 'PENDING').length;
+  const overdueCount = tasks.filter(t => 
+    t.status !== 'COMPLETED' && dayjs(t.due_date).isBefore(dayjs(), 'day')
+  ).length;
 
   // Task status change handler
   const handleStatusChange = async (taskId, newStatus) => {
@@ -309,13 +314,28 @@ const ManagerTasksComponent = () => {
             style={[styles.viewButton, selectedView === view && styles.activeButton]}
             onPress={() => setSelectedView(view)}
           >
-            <Text style={[styles.viewText, selectedView === view && styles.activeText]}>
-              {view === 'list'
-                ? 'All'
-                : view === 'create'
-                ? '+ New'
-                : view.charAt(0).toUpperCase() + view.slice(1)}
-            </Text>
+            <View style={styles.buttonContent}>
+              <Text style={[styles.viewText, selectedView === view && styles.activeText]}>
+                {view === 'list'
+                  ? 'All'
+                  : view === 'create'
+                  ? '+ New'
+                  : view.charAt(0).toUpperCase() + view.slice(1)}
+              </Text>
+              
+              {/* Only show badges for pending and overdue */}
+              {view === 'pending' && pendingCount > 0 && (
+                <View style={[styles.countBadge, { backgroundColor: '#fbbc04' }]}>
+                  <Text style={styles.countText}>{pendingCount}</Text>
+                </View>
+              )}
+              
+              {view === 'overdue' && overdueCount > 0 && (
+                <View style={[styles.countBadge, { backgroundColor: '#ea4335' }]}>
+                  <Text style={styles.countText}>{overdueCount}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -488,6 +508,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#137333',
     marginRight: 8,
+  },
+  
+  // Badge styles
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countBadge: {
+    borderRadius: 10,
+    height: 20,
+    minWidth: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  countText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
   },
 });
 

@@ -31,6 +31,10 @@ const ReportsComponent = () => {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [newReport, setNewReport] = useState('');
 
+  // Calculate badge counts
+  const pendingCount = reports.filter(r => r.status === 'PENDING').length;
+  const attendedCount = reports.filter(r => r.status === 'ATTENDED').length;
+
   // Fetch current user
   useEffect(() => {
     const fetchUserData = async () => {
@@ -288,14 +292,30 @@ const ReportsComponent = () => {
             ]}
             onPress={() => setSelectedView(view)}
           >
-            <Text
-              style={[
-                styles.filterButtonText,
-                selectedView === view && styles.activeFilterButtonText,
-              ]}
-            >
-              {view.charAt(0).toUpperCase() + view.slice(1)}
-            </Text>
+            <View style={styles.buttonContent}>
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedView === view && styles.activeFilterButtonText,
+                ]}
+              >
+                {view.charAt(0).toUpperCase() + view.slice(1)}
+              </Text>
+              
+              {/* Badge for pending button */}
+              {view === 'pending' && pendingCount > 0 && (
+                <View style={[styles.countBadge, { backgroundColor: '#fbbc04' }]}>
+                  <Text style={styles.countText}>{pendingCount}</Text>
+                </View>
+              )}
+              
+              {/* Badge for attended button */}
+              {view === 'attended' && attendedCount > 0 && (
+                <View style={[styles.countBadge, { backgroundColor: '#1a73e8' }]}>
+                  <Text style={styles.countText}>{attendedCount}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         ))}
         <TouchableOpacity style={styles.addButton} onPress={handleAddReport}>
@@ -593,6 +613,24 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: 'white',
     textAlign: 'center',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countBadge: {
+    borderRadius: 10,
+    height: 20,
+    minWidth: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  countText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+    paddingHorizontal: 4,
   },
 });
 
