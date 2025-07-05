@@ -351,23 +351,11 @@ class ReportViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only employees can create reports")
 
         report = serializer.save(employee=self.request.user.employee_profile)
-        manager = report.employee.manager
-
         ManagerNotification.objects.create(
-            manager=manager,
+            manager=report.employee.manager,
             report=report,
             is_read=False
         )
-        
-        # Notify all employees
-        employees = Employee.objects.filter(manager=manager)
-        for employee in employees:
-            EmployeeNotification.objects.create(
-                employee=employee,
-                report=report,
-                message=f"New report from {report.employee.first_name} {report.employee.last_name}",
-                is_read=False
-            )
 
     @action(detail=True, methods=['post'])
     def attend(self, request, pk=None):
