@@ -65,26 +65,19 @@ class Report(models.Model):
         ('RESOLVED', 'Resolved'),
     ]
 
-    sender = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='sent_reports'
-    )
-    recipient = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='received_reports',
-        null=True,
-        blank=True
-    )
-    employee_recipient = models.ForeignKey(
+    employee = models.ForeignKey(
         Employee,
         on_delete=models.CASCADE,
-        related_name='employee_received_reports',
-        null=True,
-        blank=True
+        related_name='reports'
     )
     message = models.TextField()
+    attended_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='attended_reports'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     attended_at = models.DateTimeField(null=True, blank=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
@@ -95,26 +88,7 @@ class Report(models.Model):
     )
 
     def __str__(self):
-        recipient = self.recipient if self.recipient else self.employee_recipient
-        return f"Report from {self.sender} to {recipient}"
-
-
-class ReportNotification(models.Model):
-    report = models.ForeignKey(
-        Report,
-        on_delete=models.CASCADE,
-        related_name='notifications'
-    )
-    recipient = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='report_notifications'
-    )
-    is_read = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Report notification for {self.recipient}"
+        return f"Report from {self.employee} - {self.created_at} ({self.get_status_display()})"
 
 
 class Suggestion(models.Model):
@@ -191,6 +165,12 @@ class ManagerNotification(models.Model):
         on_delete=models.CASCADE,
         related_name='notifications'
     )
+    report = models.ForeignKey(
+        Report,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
     suggestion = models.ForeignKey(
         Suggestion,
         on_delete=models.CASCADE,
@@ -219,12 +199,6 @@ class EmployeeNotification(models.Model):
     )
     task = models.ForeignKey(
         Task,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )
-    report = models.ForeignKey(
-        Report,
         on_delete=models.CASCADE,
         null=True,
         blank=True
