@@ -12,17 +12,15 @@ from .views import (
     UnreadReportsView,
     MarkNotificationReadView,
     TaskViewSet,
-    TaskCompletedView,
-    TaskPendingView,
+    EmployeeTaskView,
     TaskOverdueView,
-    TaskDuePeriodView,
+    TaskNotificationViewSet,
     SendTaskReminderView,
-    SetDailySummaryTimeView,
+    TaskCountView,
     EmployeeNotificationViewSet,
     AnnouncementViewSet,
     SuggestionViewSet,
     ChangePasswordView,
-    EmployeeTaskView,
     MarkAnnouncementNotedView,
     NotedEmployeesView,
     current_user,
@@ -35,7 +33,9 @@ router = DefaultRouter()
 router.register(r'employees', EmployeeViewSet, basename='employee')
 router.register(r'reports', ReportViewSet, basename='report')
 router.register(r'tasks', TaskViewSet, basename='task')
+router.register(r'task-notifications', TaskNotificationViewSet, basename='task-notification')
 router.register(r'announcements', AnnouncementViewSet, basename='announcement')
+router.register(r'suggestions', SuggestionViewSet, basename='suggestion')
 router.register(r'employee-notifications', EmployeeNotificationViewSet, basename='employee-notification')
 
 urlpatterns = [
@@ -62,27 +62,16 @@ urlpatterns = [
     path('reports/<int:pk>/resolve/', ReportViewSet.as_view({'post': 'resolve'}), name='report-resolve'),
 
     # Tasks
-    path('tasks/completed/', TaskCompletedView.as_view(), name='completed-tasks'),
-    path('tasks/pending/', TaskPendingView.as_view(), name='pending-tasks'),
+    path('tasks/count/', TaskCountView.as_view(), name='task-count'),
     path('tasks/overdue/', TaskOverdueView.as_view(), name='overdue-tasks'),
-    path('tasks/due/<str:period>/', TaskDuePeriodView.as_view(), name='due-period-tasks'),
     path('tasks/<int:pk>/remind/', SendTaskReminderView.as_view(), name='task-remind'),
-
-    # Manager features
-    path('manager/set-summary-time/', SetDailySummaryTimeView.as_view(), name='set-summary-time'),
+    path('tasks/<int:pk>/mark-read/', TaskViewSet.as_view({'post': 'mark_read'}), name='task-mark-read'),
+    path('employee-tasks/', EmployeeTaskView.as_view(), name='employee-tasks'),
+    path('task-notifications/mark-all-read/', TaskNotificationViewSet.as_view({'post': 'mark_all_read'}), name='task-notifications-mark-all-read'),
 
     # Announcement actions
     path('announcements/<int:pk>/mark_noted/', MarkAnnouncementNotedView.as_view(), name='mark-announcement-noted'),
     path('announcements/<int:pk>/noted_employees/', NotedEmployeesView.as_view(), name='noted-employees'),
-
-    # Suggestion endpoints
-    path('suggestions/', SuggestionViewSet.as_view({'get': 'list', 'post': 'create'}), name='suggestion-list'),
-    path('suggestions/<int:pk>/', SuggestionViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='suggestion-detail'),
-    path('suggestions/status/<str:status>/', SuggestionViewSet.as_view({'get': 'list'}), name='suggestion-by-status'),
-
-    # Employee task views
-    path('employee-tasks/', EmployeeTaskView.as_view(), name='employee-tasks'),
-    path('employee-tasks/<str:status>/', EmployeeTaskView.as_view(), name='employee-tasks-filtered'),
 
     # Include other router URLs
     path('', include(router.urls)),

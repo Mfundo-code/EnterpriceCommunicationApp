@@ -13,6 +13,7 @@ const TaskScreen = () => {
 
   useFocusEffect(
     React.useCallback(() => {
+      // Reset notifications when screen is focused
       resetNotification('tasks');
     }, [resetNotification])
   );

@@ -36,11 +36,10 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
- 
-  const incrementNotification = (type) => {
+  const incrementNotification = (type, amount = 1) => {
     setNotificationCounts(prev => ({
       ...prev,
-      [type]: prev[type] + 1,
+      [type]: Math.max(0, prev[type] + amount),
     }));
   };
 

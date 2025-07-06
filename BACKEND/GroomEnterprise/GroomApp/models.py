@@ -149,9 +149,15 @@ class Task(models.Model):
 
     title = models.CharField(max_length=255)
     description = models.TextField()
-    assigned_to = models.ManyToManyField(
+    assigned_to = models.ForeignKey(
         Employee,
+        on_delete=models.CASCADE,
         related_name='tasks'
+    )
+    manager = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_tasks'
     )
     due_date = models.DateField()
     status = models.CharField(
@@ -166,12 +172,42 @@ class Task(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    is_read = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.title} - {self.get_status_display()}"
     
     class Meta:
         ordering = ['-created_at']
+
+
+class TaskNotification(models.Model):
+    NOTIFICATION_TYPES = [
+        ('ASSIGNED', 'Task Assigned'),
+        ('UPDATED', 'Task Updated'),
+        ('REMINDER', 'Task Reminder'),
+    ]
+
+    task = models.ForeignKey(
+        Task,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+    employee = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name='task_notifications'
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    notification_type = models.CharField(
+        max_length=20,
+        choices=NOTIFICATION_TYPES,
+        default='ASSIGNED'
+    )
+
+    def __str__(self):
+        return f"Task Notification for {self.employee}"
 
 
 class ManagerNotification(models.Model):
@@ -192,12 +228,6 @@ class ManagerNotification(models.Model):
         null=True,
         blank=True
     )
-    task = models.ForeignKey(
-        Task,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -211,12 +241,6 @@ class EmployeeNotification(models.Model):
         Employee,
         on_delete=models.CASCADE,
         related_name='notifications'
-    )
-    task = models.ForeignKey(
-        Task,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
     )
     message = models.TextField()
     is_read = models.BooleanField(default=False)

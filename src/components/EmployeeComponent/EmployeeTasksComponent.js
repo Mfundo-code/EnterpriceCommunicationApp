@@ -1,4 +1,3 @@
-// EmployeeTasksComponent.js
 import React, { useContext, useState, useEffect } from 'react';
 import {
   View,
@@ -14,15 +13,18 @@ import axios from 'axios';
 import { AuthContext } from '../../../App';
 import dayjs from 'dayjs';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useNotifications } from '../NotificationContext';
 
 const API_BASE = 'http://www.teamkonekt.com/api';
 
 const EmployeeTasksComponent = () => {
   const { token } = useContext(AuthContext);
+  const { incrementNotification } = useNotifications();
   const [tasks, setTasks] = useState([]);
   const [selectedView, setSelectedView] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lastChecked, setLastChecked] = useState(new Date());
 
   const fetchTasks = async () => {
     try {
@@ -37,8 +39,23 @@ const EmployeeTasksComponent = () => {
       });
       const data = response.data;
 
+      console.log('💾 fetched tasks payload →', data);
+
       if (Array.isArray(data)) {
         setTasks(data);
+        
+        // Check for new pending tasks since last check
+        const newTasks = data.filter(task => 
+          task.status === 'PENDING' && 
+          dayjs(task.created_at).isAfter(dayjs(lastChecked))
+        );
+        
+        if (newTasks.length > 0) {
+          incrementNotification('tasks');
+        }
+        
+        // Update last checked time
+        setLastChecked(new Date());
       } else if (Array.isArray(data.results)) {
         setTasks(data.results);
       } else {
@@ -64,6 +81,11 @@ const EmployeeTasksComponent = () => {
       setTasks((prev) =>
         prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
       );
+      
+      // If marking as completed, potentially clear a notification
+      if (newStatus === 'COMPLETED') {
+        incrementNotification('tasks', -1); // Decrement notification count
+      }
     } catch (err) {
       console.error('Status change error:', err);
       Alert.alert('Error', 'Failed to update task status');
@@ -101,6 +123,7 @@ const EmployeeTasksComponent = () => {
       </View>
 
       <View style={styles.actionContainer}>
+        {/* If not completed, allow marking complete */}
         {item.status !== 'COMPLETED' && (
           <TouchableOpacity
             style={styles.completeButton}
@@ -110,6 +133,7 @@ const EmployeeTasksComponent = () => {
           </TouchableOpacity>
         )}
 
+        {/* If still pending, allow starting */}
         {item.status === 'PENDING' && (
           <TouchableOpacity
             style={styles.startButton}
@@ -132,6 +156,7 @@ const EmployeeTasksComponent = () => {
 
   return (
     <View style={styles.container}>
+      {/* ─── HORIZONTAL FILTER BAR WITH FIXED HEIGHT ─── */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -193,8 +218,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // ─── LIMIT THE HEIGHT OF THE SCROLLVIEW ───
   viewSelectorWrapper: {
-    maxHeight: 60,
+    maxHeight: 60, // keep it from growing taller than ~50px
     marginBottom: 15,
   },
   viewSelector: {
@@ -221,6 +248,7 @@ const styles = StyleSheet.create({
   activeViewButtonText: {
     color: 'white',
   },
+
   taskCard: {
     backgroundColor: 'white',
     borderRadius: 12,

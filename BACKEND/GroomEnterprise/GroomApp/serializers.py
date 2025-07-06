@@ -10,6 +10,7 @@ from .models import (
     EmployeeNotification,
     Task,
     Announcement,
+    TaskNotification
 )
 
 class ManagerSignupSerializer(serializers.ModelSerializer):
@@ -100,7 +101,6 @@ class SuggestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Suggestion
         fields = ['id', 'message', 'created_at', 'status', 'employee_name', 'employee']
-        # Removed 'status' from read_only_fields to allow status updates
         read_only_fields = ['id', 'created_at', 'manager', 'employee_name', 'employee']
 
     def get_employee_name(self, obj):
@@ -109,11 +109,10 @@ class SuggestionSerializer(serializers.ModelSerializer):
         return None
 
 class TaskSerializer(serializers.ModelSerializer):
-    assigned_to = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Employee.objects.all()
-    )
-    employee_name = serializers.SerializerMethodField()
+    assigned_to_name = serializers.SerializerMethodField()
+    priority_display = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+    manager_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -122,41 +121,53 @@ class TaskSerializer(serializers.ModelSerializer):
             'title',
             'description',
             'assigned_to',
-            'employee_name',
+            'assigned_to_name',
+            'manager',
+            'manager_name',
             'due_date',
             'status',
+            'status_display',
             'priority',
+            'priority_display',
             'created_at',
             'completed_at',
+            'is_read',
         ]
-        read_only_fields = ['created_at', 'completed_at', 'employee_name']
+        read_only_fields = ['manager', 'created_at', 'completed_at', 'is_read']
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        request = self.context.get('request')
-        if request and hasattr(request.user, 'manager_profile'):
-            self.fields['assigned_to'].queryset = Employee.objects.filter(manager=request.user)
+    def get_assigned_to_name(self, obj):
+        return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}"
 
-    def get_employee_name(self, obj):
-        names = [f"{e.first_name} {e.last_name}" for e in obj.assigned_to.all()]
-        return ", ".join(names)
+    def get_manager_name(self, obj):
+        return f"{obj.manager.first_name} {obj.manager.last_name}"
+
+    def get_priority_display(self, obj):
+        return obj.get_priority_display()
+
+    def get_status_display(self, obj):
+        return obj.get_status_display()
+
+class TaskNotificationSerializer(serializers.ModelSerializer):
+    task = TaskSerializer(read_only=True)
+    
+    class Meta:
+        model = TaskNotification
+        fields = ['id', 'task', 'is_read', 'created_at', 'notification_type']
+        read_only_fields = ['created_at']
 
 class ManagerNotificationSerializer(serializers.ModelSerializer):
     report = ReportSerializer(read_only=True)
     suggestion = SuggestionSerializer(read_only=True)
-    task = TaskSerializer(read_only=True)
 
     class Meta:
         model = ManagerNotification
-        fields = ['id', 'report', 'suggestion', 'task', 'is_read', 'created_at']
+        fields = ['id', 'report', 'suggestion', 'is_read', 'created_at']
         read_only_fields = ['created_at']
 
 class EmployeeNotificationSerializer(serializers.ModelSerializer):
-    task = TaskSerializer(read_only=True)
-
     class Meta:
         model = EmployeeNotification
-        fields = ['id', 'task', 'message', 'is_read', 'created_at']
+        fields = ['id', 'message', 'is_read', 'created_at']
         read_only_fields = ['created_at']
 
 class AnnouncementSerializer(serializers.ModelSerializer):

@@ -24,7 +24,8 @@ from .models import (
     ManagerProfile,
     EmployeeNotification,
     EmailConfirmation,
-    ReportSeen
+    ReportSeen,
+    TaskNotification
 )
 from .serializers import (
     ManagerSignupSerializer,
@@ -35,6 +36,7 @@ from .serializers import (
     AnnouncementSerializer,
     SuggestionSerializer,
     EmployeeNotificationSerializer,
+    TaskNotificationSerializer
 )
 
 User = get_user_model()
@@ -257,18 +259,27 @@ def notification_counts(request):
             seen_by__user=user
         ).count()
         
+        # Count unread tasks for employee
         tasks_count = Task.objects.filter(
             assigned_to=employee,
-            status__in=['PENDING', 'IN_PROGRESS']
+            is_read=False
         ).count()
         
+        # Count announcements not noted by employee
         announcements_count = Announcement.objects.filter(
             manager=manager
         ).exclude(
             noted_by=employee
         ).count()
         
+        # Count unread notifications
         notifications_count = EmployeeNotification.objects.filter(
+            employee=employee,
+            is_read=False
+        ).count()
+        
+        # Count unread task notifications
+        task_notifications_count = TaskNotification.objects.filter(
             employee=employee,
             is_read=False
         ).count()
@@ -277,7 +288,8 @@ def notification_counts(request):
             'reports': reports_count,
             'tasks': tasks_count,
             'announcements': announcements_count,
-            'notifications': notifications_count
+            'notifications': notifications_count,
+            'task_notifications': task_notifications_count
         })
         
     return Response({
@@ -285,7 +297,8 @@ def notification_counts(request):
         'tasks': 0,
         'announcements': 0,
         'suggestions': 0,
-        'notifications': 0
+        'notifications': 0,
+        'task_notifications': 0
     })
 
 
@@ -487,7 +500,6 @@ class NotificationCountView(APIView):
         counts = {
             'reports': ManagerNotification.objects.filter(manager=manager, report__isnull=False, is_read=False).count(),
             'suggestions': ManagerNotification.objects.filter(manager=manager, suggestion__isnull=False, is_read=False).count(),
-            'tasks': ManagerNotification.objects.filter(manager=manager, task__isnull=False, is_read=False).count(),
         }
         counts['total'] = sum(counts.values())
         return Response(counts)
@@ -571,13 +583,21 @@ class TaskViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if hasattr(user, 'manager_profile'):
-            return Task.objects.filter(assigned_to__manager=user).order_by('-created_at')
+            return Task.objects.filter(manager=user).order_by('-created_at')
         return Task.objects.filter(assigned_to__user=user).order_by('-created_at')
 
     def perform_create(self, serializer):
         if not hasattr(self.request.user, 'manager_profile'):
             raise PermissionDenied("Only managers can create tasks")
-        serializer.save()
+            
+        task = serializer.save(manager=self.request.user)
+        
+        # Create notification
+        TaskNotification.objects.create(
+            task=task,
+            employee=task.assigned_to,
+            is_read=False
+        )
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -601,72 +621,92 @@ class TaskViewSet(viewsets.ModelViewSet):
                 )
 
             instance.status = new_status
+            if new_status == 'COMPLETED':
+                instance.completed_at = timezone.now()
             instance.save()
             return Response(TaskSerializer(instance).data)
 
         return super().update(request, *args, **kwargs)
+    
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        task = self.get_object()
+        if hasattr(request.user, 'employee_profile'):
+            task.is_read = True
+            task.save()
+            
+            # Also mark notifications as read
+            TaskNotification.objects.filter(
+                task=task,
+                employee=request.user.employee_profile
+            ).update(is_read=True)
+            
+        return Response(TaskSerializer(task).data)
 
 
-class TaskCompletedView(generics.ListAPIView):
+class EmployeeTaskView(generics.ListAPIView):
     serializer_class = TaskSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
+    permission_classes = [IsAuthenticated]
     pagination_class = TaskPagination
 
     def get_queryset(self):
-        return Task.objects.filter(
-            status='COMPLETED',
-            assigned_to__manager=self.request.user
-        ).order_by('-created_at')
+        if not hasattr(self.request.user, 'employee_profile'):
+            raise PermissionDenied("Only employees can view tasks")
 
+        employee = self.request.user.employee_profile
+        status = self.request.query_params.get('status', 'all')
 
-class TaskPendingView(generics.ListAPIView):
-    serializer_class = TaskSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
-    pagination_class = TaskPagination
-
-    def get_queryset(self):
-        return Task.objects.filter(
-            status__in=['PENDING', 'IN_PROGRESS'],
-            assigned_to__manager=self.request.user
-        ).order_by('-created_at')
+        qs = Task.objects.filter(assigned_to=employee)
+        
+        if status == 'pending':
+            return qs.filter(status__in=['PENDING', 'IN_PROGRESS'])
+        elif status == 'completed':
+            return qs.filter(status='COMPLETED')
+        elif status == 'unread':
+            return qs.filter(is_read=False)
+        return qs.order_by('-created_at')
 
 
 class TaskOverdueView(generics.ListAPIView):
     serializer_class = TaskSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
+    permission_classes = [IsAuthenticated]
     pagination_class = TaskPagination
 
     def get_queryset(self):
+        if not hasattr(self.request.user, 'employee_profile'):
+            raise PermissionDenied("Only employees can view tasks")
+
+        employee = self.request.user.employee_profile
         today = timezone.now().date()
         return Task.objects.filter(
+            assigned_to=employee,
             due_date__lt=today,
-            status__in=['PENDING', 'IN_PROGRESS'],
-            assigned_to__manager=self.request.user
+            status__in=['PENDING', 'IN_PROGRESS']
         ).order_by('-created_at')
 
 
-class TaskDuePeriodView(generics.ListAPIView):
-    serializer_class = TaskSerializer
+class TaskNotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = TaskNotificationSerializer
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
-    pagination_class = TaskPagination
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        today = timezone.now().date()
-        period = self.kwargs['period']
-
-        if period == 'day':
-            return Task.objects.filter(due_date=today).order_by('-created_at')  
-        elif period == 'week':
-            start = today - timedelta(days=today.weekday())
-            end = start + timedelta(days=6)
-            return Task.objects.filter(due_date__range=(start, end)).order_by('-created_at')
-        elif period == 'month':
-            return Task.objects.filter(due_date__year=today.year, due_date__month=today.month).order_by('-created_at')
-        return Task.objects.none()
+        if hasattr(self.request.user, 'employee_profile'):
+            return TaskNotification.objects.filter(
+                employee=self.request.user.employee_profile
+            ).order_by('-created_at')
+        return TaskNotification.objects.none()
+    
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        if hasattr(request.user, 'employee_profile'):
+            TaskNotification.objects.filter(
+                employee=request.user.employee_profile,
+                is_read=False
+            ).update(is_read=True)
+        return Response({'status': 'all marked read'})
 
 
 class SendTaskReminderView(APIView):
@@ -675,34 +715,75 @@ class SendTaskReminderView(APIView):
 
     def post(self, request, pk):
         task = get_object_or_404(Task, pk=pk)
-        for emp in task.assigned_to.all():
-            EmployeeNotification.objects.create(
-                employee=emp,
-                task=task,
-                message=f"Reminder: Task '{task.title}' is due on {task.due_date}",
-                is_read=False
-            )
-        return Response({'detail': 'Reminders sent successfully.'})
+        TaskNotification.objects.create(
+            employee=task.assigned_to,
+            task=task,
+            notification_type='REMINDER',
+            is_read=False
+        )
+        return Response({'detail': 'Reminder sent successfully.'})
 
 
-class SetDailySummaryTimeView(APIView):
+class TaskCountView(APIView):
     authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsManager]
+    permission_classes = [IsAuthenticated]
 
-    def post(self, request):
-        time_str = request.data.get('time')
-        if not time_str:
-            return Response({'detail': 'Missing "time" field.'}, status=400)
-        manager_profile = request.user.manager_profile
-        manager_profile.daily_summary_time = time_str
-        manager_profile.save()
-        return Response({'detail': 'Daily summary time updated successfully.'})
+    def get(self, request):
+        user = request.user
+        counts = {}
+        today = timezone.now().date()
+        
+        if hasattr(user, 'employee_profile'):
+            employee = user.employee_profile
+            counts = {
+                'total': Task.objects.filter(assigned_to=employee).count(),
+                'pending': Task.objects.filter(
+                    assigned_to=employee,
+                    status__in=['PENDING', 'IN_PROGRESS']
+                ).count(),
+                'completed': Task.objects.filter(
+                    assigned_to=employee,
+                    status='COMPLETED'
+                ).count(),
+                'overdue': Task.objects.filter(
+                    assigned_to=employee,
+                    due_date__lt=today,
+                    status__in=['PENDING', 'IN_PROGRESS']
+                ).count(),
+                'unread': Task.objects.filter(
+                    assigned_to=employee,
+                    is_read=False
+                ).count(),
+                'notifications': TaskNotification.objects.filter(
+                    employee=employee,
+                    is_read=False
+                ).count(),
+            }
+        elif hasattr(user, 'manager_profile'):
+            counts = {
+                'total': Task.objects.filter(manager=user).count(),
+                'pending': Task.objects.filter(
+                    manager=user,
+                    status__in=['PENDING', 'IN_PROGRESS']
+                ).count(),
+                'completed': Task.objects.filter(
+                    manager=user,
+                    status='COMPLETED'
+                ).count(),
+                'overdue': Task.objects.filter(
+                    manager=user,
+                    due_date__lt=today,
+                    status__in=['PENDING', 'IN_PROGRESS']
+                ).count(),
+            }
+        
+        return Response(counts)
 
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = AnnouncementSerializer
     authentication_classes = [TokenAuthentication]
-    permission_permissions = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -719,33 +800,12 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
 class EmployeeNotificationViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeNotificationSerializer
     authentication_classes = [TokenAuthentication]
-    permission_permissions = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         if hasattr(self.request.user, 'employee_profile'):
             return EmployeeNotification.objects.filter(employee=self.request.user.employee_profile).order_by('-created_at')
         return EmployeeNotification.objects.none()
-
-
-class EmployeeTaskView(generics.ListAPIView):
-    serializer_class = TaskSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_permissions = [IsAuthenticated]
-    pagination_class = TaskPagination
-
-    def get_queryset(self):
-        if not hasattr(self.request.user, 'employee_profile'):
-            raise PermissionDenied("Only employees can view tasks")
-
-        employee = self.request.user.employee_profile
-        status_filter = self.kwargs.get('status', 'all')
-
-        qs = Task.objects.filter(assigned_to=employee).order_by('-created_at')
-        if status_filter == 'pending':
-            return qs.filter(status__in=['PENDING', 'IN_PROGRESS'])
-        elif status_filter == 'completed':
-            return qs.filter(status='COMPLETED')
-        return qs
 
 
 class MarkAnnouncementNotedView(APIView):
@@ -795,7 +855,6 @@ class ChangePasswordView(APIView):
         user.save()
         return Response({'message': 'Password updated successfully'})
 
-# views.py
 class ResetNotificationCountView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -821,10 +880,15 @@ class ResetNotificationCountView(APIView):
         elif hasattr(user, 'employee_profile'):
             employee = user.employee_profile
             if notification_type == 'tasks':
-                # Mark task notifications as read ✅ Fixed
-                EmployeeNotification.objects.filter(
+                # Mark all task notifications as read
+                TaskNotification.objects.filter(
                     employee=employee,
-                    task__isnull=False,
+                    is_read=False
+                ).update(is_read=True)
+                
+                # Also mark tasks as read
+                Task.objects.filter(
+                    assigned_to=employee,
                     is_read=False
                 ).update(is_read=True)
                 
