@@ -76,7 +76,8 @@ const ManagerTasksComponent = () => {
   const { token } = useContext(AuthContext);
 
   // Task states
-  const [tasks, setTasks] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
+  const [filteredTasks, setFilteredTasks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -99,11 +100,46 @@ const ManagerTasksComponent = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Calculate badge counts for pending and overdue only
-  const pendingCount = tasks.filter(t => t.status === 'PENDING').length;
-  const overdueCount = tasks.filter(t => 
-    t.status !== 'COMPLETED' && dayjs(t.due_date).isBefore(dayjs(), 'day')
+  // Calculate task counts
+  const pendingCount = allTasks.filter(t => 
+    ['PENDING', 'IN_PROGRESS'].includes(t.status) && 
+    !dayjs(t.due_date).isBefore(dayjs(), 'day')
   ).length;
+  
+  const overdueCount = allTasks.filter(t => 
+    ['PENDING', 'IN_PROGRESS'].includes(t.status) && 
+    dayjs(t.due_date).isBefore(dayjs(), 'day')
+  ).length;
+
+  // Filter tasks based on selected view
+  useEffect(() => {
+    let filtered = [];
+    
+    switch (selectedView) {
+      case 'list':
+        filtered = [...allTasks];
+        break;
+      case 'completed':
+        filtered = allTasks.filter(t => t.status === 'COMPLETED');
+        break;
+      case 'pending':
+        filtered = allTasks.filter(t => 
+          ['PENDING', 'IN_PROGRESS'].includes(t.status) && 
+          !dayjs(t.due_date).isBefore(dayjs(), 'day')
+        );
+        break;
+      case 'overdue':
+        filtered = allTasks.filter(t => 
+          ['PENDING', 'IN_PROGRESS'].includes(t.status) && 
+          dayjs(t.due_date).isBefore(dayjs(), 'day')
+        );
+        break;
+      default:
+        filtered = [...allTasks];
+    }
+    
+    setFilteredTasks(filtered);
+  }, [selectedView, allTasks]);
 
   // Task status change handler
   const handleStatusChange = async (taskId, newStatus) => {
@@ -113,7 +149,14 @@ const ManagerTasksComponent = () => {
         { status: newStatus },
         { headers: { Authorization: `Token ${token}` } }
       );
-      setTasks(tasks.map(t => (t.id === taskId ? { ...t, status: newStatus } : t)));
+      
+      setAllTasks(allTasks.map(t => 
+        t.id === taskId ? { 
+          ...t, 
+          status: newStatus,
+          completed_at: newStatus === 'COMPLETED' ? dayjs().format() : t.completed_at
+        } : t
+      ));
     } catch {
       Alert.alert('Error', 'Failed to update status');
     }
@@ -148,7 +191,7 @@ const ManagerTasksComponent = () => {
               await axios.delete(`${API_BASE}/tasks/${taskId}/`, {
                 headers: { Authorization: `Token ${token}` },
               });
-              setTasks(tasks.filter(t => t.id !== taskId));
+              setAllTasks(allTasks.filter(t => t.id !== taskId));
             } catch {
               Alert.alert('Error', 'Failed to delete task');
             }
@@ -166,7 +209,7 @@ const ManagerTasksComponent = () => {
     }
     try {
       setLoading(true);
-      await axios.post(
+      const response = await axios.post(
         `${API_BASE}/tasks/`,
         {
           title: newTask.title,
@@ -176,6 +219,11 @@ const ManagerTasksComponent = () => {
         },
         { headers: { Authorization: `Token ${token}` } }
       );
+      
+      // Add new task to allTasks
+      setAllTasks(prev => [response.data, ...prev]);
+      
+      // Reset form
       setNewTask({ title: '', description: '', assigned_to: null, due_date: dayjs() });
       setDueDateText(dayjs().format('YYYY-MM-DD'));
       setSelectedView('list');
@@ -192,16 +240,11 @@ const ManagerTasksComponent = () => {
   const fetchTasks = async (page = 1) => {
     try {
       page === 1 ? setLoading(true) : setIsLoadingMore(true);
-      let url = `${API_BASE}/tasks/`;
-      if (selectedView === 'completed') url = `${API_BASE}/tasks/completed/`;
-      if (selectedView === 'pending') url = `${API_BASE}/tasks/pending/`;
-      if (selectedView === 'overdue') url = `${API_BASE}/tasks/overdue/`;
-
-      const { data } = await axios.get(`${url}?page=${page}`, {
+      const { data } = await axios.get(`${API_BASE}/tasks/?page=${page}`, {
         headers: { Authorization: `Token ${token}` },
       });
 
-      setTasks(prev => (page === 1 ? data.results : [...prev, ...data.results]));
+      setAllTasks(prev => (page === 1 ? data.results : [...prev, ...data.results]));
       setTotalPages(data.total_pages);
       setError('');
     } catch {
@@ -245,65 +288,66 @@ const ManagerTasksComponent = () => {
   };
 
   useEffect(() => {
-    if (selectedView !== 'create') {
-      setCurrentPage(1);
-      fetchTasks(1);
-    }
-  }, [selectedView, token]);
+    fetchTasks(1);
+  }, [token]);
 
   useEffect(() => {
     fetchEmployees(1);
   }, [token]);
 
   // ───── Render each task ─────
-  const renderTask = ({ item }) => (
-    <View style={styles.taskCard}>
-      <View style={styles.taskHeader}>
-        <Text style={styles.taskTitle}>{item.title}</Text>
-        <View style={styles.taskActions}>
-          {item.status === 'COMPLETED' ? (
-            // If status is COMPLETED, show a "Completed" label
-            <Text style={styles.completedText}>Completed</Text>
-          ) : (
-            // Otherwise (PENDING or OVERDUE), show "Remind" button
+  const renderTask = ({ item }) => {
+    const isOverdue = ['PENDING', 'IN_PROGRESS'].includes(item.status) && 
+                      dayjs(item.due_date).isBefore(dayjs(), 'day');
+    
+    return (
+      <View style={[styles.taskCard, isOverdue && styles.overdueTask]}>
+        <View style={styles.taskHeader}>
+          <Text style={styles.taskTitle}>{item.title}</Text>
+          <View style={styles.taskActions}>
+            {item.status === 'COMPLETED' ? (
+              <Text style={styles.completedText}>Completed</Text>
+            ) : (
+              <TouchableOpacity
+                style={styles.remindButton}
+                onPress={() => handleSendReminder(item.id)}
+              >
+                <Text style={styles.remindText}>Remind</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
-              style={styles.remindButton}
-              onPress={() => handleSendReminder(item.id)}
+              onPress={() => handleDeleteTask(item.id)}
+              style={styles.deleteButton}
             >
-              <Text style={styles.remindText}>Remind</Text>
+              <Icon name="delete" size={20} color="#1a73e8" />
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={() => handleDeleteTask(item.id)}
-            style={styles.deleteButton}
+          </View>
+        </View>
+
+        <Text style={styles.taskDescription}>{item.description}</Text>
+
+        <View style={styles.taskDetails}>
+          <Text>
+            <Text style={styles.detailLabel}>Assigned to:</Text> {item.employee_name}
+          </Text>
+          <Text style={isOverdue && styles.overdueText}>
+            <Text style={styles.detailLabel}>Due:</Text>{' '}
+            {dayjs(item.due_date).format('DD/MM/YYYY')}
+            {isOverdue && ' (Overdue)'}
+          </Text>
+          <Picker
+            selectedValue={item.status}
+            style={styles.statusPicker}
+            onValueChange={(val) => handleStatusChange(item.id, val)}
           >
-            <Icon name="delete" size={20} color="#1a73e8" />
-          </TouchableOpacity>
+            <Picker.Item label="Pending" value="PENDING" />
+            <Picker.Item label="In Progress" value="IN_PROGRESS" />
+            <Picker.Item label="Completed" value="COMPLETED" />
+          </Picker>
         </View>
       </View>
-
-      <Text style={styles.taskDescription}>{item.description}</Text>
-
-      <View style={styles.taskDetails}>
-        <Text>
-          <Text style={styles.detailLabel}>Assigned to:</Text> {item.employee_name}
-        </Text>
-        <Text>
-          <Text style={styles.detailLabel}>Due:</Text>{' '}
-          {dayjs(item.due_date).format('DD/MM/YYYY')}
-        </Text>
-        <Picker
-          selectedValue={item.status}
-          style={styles.statusPicker}
-          onValueChange={(val) => handleStatusChange(item.id, val)}
-        >
-          <Picker.Item label="Pending" value="PENDING" />
-          <Picker.Item label="In Progress" value="IN_PROGRESS" />
-          <Picker.Item label="Completed" value="COMPLETED" />
-        </Picker>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -323,7 +367,6 @@ const ManagerTasksComponent = () => {
                   : view.charAt(0).toUpperCase() + view.slice(1)}
               </Text>
               
-              {/* Only show badges for pending and overdue */}
               {view === 'pending' && pendingCount > 0 && (
                 <View style={[styles.countBadge, { backgroundColor: '#fbbc04' }]}>
                   <Text style={styles.countText}>{pendingCount}</Text>
@@ -393,7 +436,7 @@ const ManagerTasksComponent = () => {
         </View>
       ) : (
         <FlatList
-          data={tasks}
+          data={filteredTasks}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderTask}
           contentContainerStyle={styles.taskList}
@@ -481,6 +524,10 @@ const styles = StyleSheet.create({
     elevation: 2,
     padding: 10,
   },
+  overdueTask: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#ea4335',
+  },
   taskHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -502,6 +549,7 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontWeight: 'bold', color: '#353636', },
   statusPicker: { height: 30, width: 130 },
+  overdueText: { color: '#ea4335' },
   
   completedText: {
     fontSize: 12,
