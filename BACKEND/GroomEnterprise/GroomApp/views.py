@@ -680,25 +680,6 @@ class EmployeeTaskView(generics.ListAPIView):
         return qs.order_by('-created_at')
 
 
-class TaskOverdueView(generics.ListAPIView):
-    serializer_class = TaskSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-    pagination_class = TaskPagination
-
-    def get_queryset(self):
-        if not hasattr(self.request.user, 'employee_profile'):
-            raise PermissionDenied("Only employees can view tasks")
-
-        employee = self.request.user.employee_profile
-        today = timezone.now().date()
-        return Task.objects.filter(
-            assigned_to=employee,
-            due_date__lt=today,
-            status__in=['PENDING', 'IN_PROGRESS']
-        ).order_by('-created_at')
-
-
 class TaskNotificationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TaskNotificationSerializer
     authentication_classes = [TokenAuthentication]
@@ -744,7 +725,6 @@ class TaskCountView(APIView):
     def get(self, request):
         user = request.user
         counts = {}
-        today = timezone.now().date()
         
         if hasattr(user, 'employee_profile'):
             employee = user.employee_profile
@@ -757,11 +737,6 @@ class TaskCountView(APIView):
                 'completed': Task.objects.filter(
                     assigned_to=employee,
                     status='COMPLETED'
-                ).count(),
-                'overdue': Task.objects.filter(
-                    assigned_to=employee,
-                    due_date__lt=today,
-                    status__in=['PENDING', 'IN_PROGRESS']
                 ).count(),
                 'unread': Task.objects.filter(
                     assigned_to=employee,
@@ -782,11 +757,6 @@ class TaskCountView(APIView):
                 'completed': Task.objects.filter(
                     manager=user,
                     status='COMPLETED'
-                ).count(),
-                'overdue': Task.objects.filter(
-                    manager=user,
-                    due_date__lt=today,
-                    status__in=['PENDING', 'IN_PROGRESS']
                 ).count(),
             }
         

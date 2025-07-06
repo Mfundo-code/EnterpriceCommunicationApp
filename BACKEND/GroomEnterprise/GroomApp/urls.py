@@ -13,7 +13,6 @@ from .views import (
     MarkNotificationReadView,
     TaskViewSet,
     EmployeeTaskView,
-    TaskOverdueView,
     TaskNotificationViewSet,
     SendTaskReminderView,
     TaskCountView,
@@ -63,7 +62,6 @@ urlpatterns = [
 
     # Tasks
     path('tasks/count/', TaskCountView.as_view(), name='task-count'),
-    path('tasks/overdue/', TaskOverdueView.as_view(), name='overdue-tasks'),
     path('tasks/<int:pk>/remind/', SendTaskReminderView.as_view(), name='task-remind'),
     path('tasks/<int:pk>/mark-read/', TaskViewSet.as_view({'post': 'mark_read'}), name='task-mark-read'),
     path('employee-tasks/', EmployeeTaskView.as_view(), name='employee-tasks'),
