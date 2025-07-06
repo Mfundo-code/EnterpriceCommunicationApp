@@ -149,15 +149,16 @@ class Task(models.Model):
 
     title = models.CharField(max_length=255)
     description = models.TextField()
-    assigned_to = models.ForeignKey(
+    assigned_to = models.ManyToManyField(
         Employee,
-        on_delete=models.CASCADE,
         related_name='tasks'
     )
     manager = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='created_tasks'
+        related_name='managed_tasks',
+        null=True,  # Allow null for smooth migration
+        blank=True
     )
     due_date = models.DateField()
     status = models.CharField(
@@ -187,7 +188,7 @@ class TaskNotification(models.Model):
         ('UPDATED', 'Task Updated'),
         ('REMINDER', 'Task Reminder'),
     ]
-
+    
     task = models.ForeignKey(
         Task,
         on_delete=models.CASCADE,
