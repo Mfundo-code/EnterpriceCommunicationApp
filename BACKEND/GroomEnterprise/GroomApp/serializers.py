@@ -135,11 +135,18 @@ class TaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['manager', 'created_at', 'completed_at', 'is_read']
 
+    # FIXED: Handle multiple assigned employees
     def get_assigned_to_name(self, obj):
-        return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}"
+        employees = obj.assigned_to.all()
+        if employees:
+            names = [f"{e.first_name} {e.last_name}" for e in employees]
+            return ", ".join(names)
+        return "Unassigned"
 
     def get_manager_name(self, obj):
-        return f"{obj.manager.first_name} {obj.manager.last_name}"
+        if obj.manager:
+            return f"{obj.manager.first_name} {obj.manager.last_name}"
+        return "Unassigned"
 
     def get_priority_display(self, obj):
         return obj.get_priority_display()

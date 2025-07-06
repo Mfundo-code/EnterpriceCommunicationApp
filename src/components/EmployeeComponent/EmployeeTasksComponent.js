@@ -8,66 +8,55 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import axios from 'axios';
 import { AuthContext } from '../../../App';
 import dayjs from 'dayjs';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useNotifications } from '../NotificationContext';
 
 const API_BASE = 'http://www.teamkonekt.com/api';
 
 const EmployeeTasksComponent = () => {
   const { token } = useContext(AuthContext);
-  const { incrementNotification } = useNotifications();
   const [tasks, setTasks] = useState([]);
   const [selectedView, setSelectedView] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [lastChecked, setLastChecked] = useState(new Date());
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      let url =
-        selectedView === 'all'
-          ? `${API_BASE}/employee-tasks/`
-          : `${API_BASE}/employee-tasks/${selectedView}/`;
+      const url = `${API_BASE}/employee-tasks/`;
+      const params = {};
+      
+      if (selectedView !== 'all') {
+        params.status = selectedView;
+      }
 
       const response = await axios.get(url, {
+        params,
         headers: { Authorization: `Token ${token}` },
       });
       const data = response.data;
 
-      console.log('💾 fetched tasks payload →', data);
-
       if (Array.isArray(data)) {
         setTasks(data);
-        
-        // Check for new pending tasks since last check
-        const newTasks = data.filter(task => 
-          task.status === 'PENDING' && 
-          dayjs(task.created_at).isAfter(dayjs(lastChecked))
-        );
-        
-        if (newTasks.length > 0) {
-          incrementNotification('tasks');
-        }
-        
-        // Update last checked time
-        setLastChecked(new Date());
-      } else if (Array.isArray(data.results)) {
+      } else if (Array.isArray(data?.results)) {
         setTasks(data.results);
       } else {
-        console.warn('⚠️ Unexpected response shape');
+        console.warn('⚠️ Unexpected response shape', data);
         setTasks([]);
       }
       setError('');
     } catch (err) {
+      console.error('Task load error:', err.response?.data || err.message);
       setError('Failed to load tasks');
       setTasks([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -78,18 +67,18 @@ const EmployeeTasksComponent = () => {
         { status: newStatus },
         { headers: { Authorization: `Token ${token}` } }
       );
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
-      );
       
-      // If marking as completed, potentially clear a notification
-      if (newStatus === 'COMPLETED') {
-        incrementNotification('tasks', -1); // Decrement notification count
-      }
+      // Refetch tasks to ensure UI consistency
+      fetchTasks();
     } catch (err) {
-      console.error('Status change error:', err);
+      console.error('Status change error:', err.response?.data || err.message);
       Alert.alert('Error', 'Failed to update task status');
     }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchTasks();
   };
 
   useEffect(() => {
@@ -146,7 +135,7 @@ const EmployeeTasksComponent = () => {
     </View>
   );
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" />
@@ -156,7 +145,7 @@ const EmployeeTasksComponent = () => {
 
   return (
     <View style={styles.container}>
-      {/* ─── HORIZONTAL FILTER BAR WITH FIXED HEIGHT ─── */}
+      {/* ─── HORIZONTAL FILTER BAR ─── */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -194,14 +183,20 @@ const EmployeeTasksComponent = () => {
           <Text style={styles.emptyText}>No tasks found</Text>
         </View>
       ) : (
-        <View style={{ flex: 1 }}>
-          <FlatList
-            data={tasks}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={renderTaskItem}
-            contentContainerStyle={styles.taskList}
-          />
-        </View>
+        <FlatList
+          data={tasks}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderTaskItem}
+          contentContainerStyle={styles.taskList}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#1a73e8']}
+              tintColor={'#1a73e8'}
+            />
+          }
+        />
       )}
     </View>
   );
@@ -254,6 +249,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
+    marginHorizontal: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -270,6 +266,7 @@ const styles = StyleSheet.create({
     fontSize: 18, 
     fontWeight: 'bold', 
     color: '#1a237e',
+    flexShrink: 1,
   },
   taskStatusContainer: {
     marginLeft: 10,
@@ -293,10 +290,10 @@ const styles = StyleSheet.create({
     color: '#1a73e8',
   },
   taskDescription: {
-     color: '#3c4043', 
+    color: '#3c4043', 
     marginBottom: 16,
-    fontSize: 25,
-    lineHeight: 33,
+    fontSize: 16,
+    lineHeight: 24,
   },
   taskDetails: {
     borderTopWidth: 1,
@@ -310,6 +307,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     color: '#5f6368',
+    fontSize: 14,
   },
   actionContainer: {
     flexDirection: 'row',
@@ -325,6 +323,7 @@ const styles = StyleSheet.create({
   completeText: {
     color: 'white',
     fontWeight: '500',
+    fontSize: 14,
   },
   startButton: {
     backgroundColor: '#1a73e8',
@@ -335,6 +334,7 @@ const styles = StyleSheet.create({
   startText: {
     color: 'white',
     fontWeight: '500',
+    fontSize: 14,
   },
   emptyContainer: {
     flex: 1,
@@ -351,6 +351,7 @@ const styles = StyleSheet.create({
     color: '#d93025',
     textAlign: 'center',
     marginVertical: 20,
+    paddingHorizontal: 20,
   },
   taskList: {
     paddingBottom: 20,
