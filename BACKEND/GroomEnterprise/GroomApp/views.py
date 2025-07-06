@@ -584,20 +584,31 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if hasattr(user, 'manager_profile'):
             return Task.objects.filter(manager=user).order_by('-created_at')
-        return Task.objects.filter(assigned_to__user=user).order_by('-created_at')
+        # For employees, get tasks assigned to them
+        elif hasattr(user, 'employee_profile'):
+            return Task.objects.filter(assigned_to=user.employee_profile).order_by('-created_at')
+        return Task.objects.none()
 
     def perform_create(self, serializer):
         if not hasattr(self.request.user, 'manager_profile'):
             raise PermissionDenied("Only managers can create tasks")
             
+        # Create the task instance
         task = serializer.save(manager=self.request.user)
         
-        # Create notification
-        TaskNotification.objects.create(
-            task=task,
-            employee=task.assigned_to,
-            is_read=False
-        )
+        # Assign employees to the task (many-to-many)
+        employee_ids = self.request.data.get('assigned_to', [])
+        if employee_ids:
+            employees = Employee.objects.filter(id__in=employee_ids)
+            task.assigned_to.set(employees)
+            
+            # Create notifications for each assigned employee
+            for employee in employees:
+                TaskNotification.objects.create(
+                    task=task,
+                    employee=employee,
+                    is_read=False
+                )
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -632,10 +643,11 @@ class TaskViewSet(viewsets.ModelViewSet):
     def mark_read(self, request, pk=None):
         task = self.get_object()
         if hasattr(request.user, 'employee_profile'):
+            # Mark task as read
             task.is_read = True
             task.save()
             
-            # Also mark notifications as read
+            # Mark task notifications as read for this employee
             TaskNotification.objects.filter(
                 task=task,
                 employee=request.user.employee_profile
@@ -715,13 +727,14 @@ class SendTaskReminderView(APIView):
 
     def post(self, request, pk):
         task = get_object_or_404(Task, pk=pk)
-        TaskNotification.objects.create(
-            employee=task.assigned_to,
-            task=task,
-            notification_type='REMINDER',
-            is_read=False
-        )
-        return Response({'detail': 'Reminder sent successfully.'})
+        for employee in task.assigned_to.all():
+            TaskNotification.objects.create(
+                employee=employee,
+                task=task,
+                notification_type='REMINDER',
+                is_read=False
+            )
+        return Response({'detail': 'Reminders sent successfully.'})
 
 
 class TaskCountView(APIView):
