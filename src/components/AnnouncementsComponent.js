@@ -7,9 +7,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView
+  Alert
 } from 'react-native';
 import axios from 'axios';
 import { AuthContext } from '../../App';
@@ -36,10 +34,6 @@ const AnnouncementsComponent = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [showForm, setShowForm] = useState(false);
-
-  const [notedModalVisible, setNotedModalVisible] = useState(false);
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
-  const [notedEmployees, setNotedEmployees] = useState([]);
 
   useEffect(() => {
     if (!token) return;
@@ -189,26 +183,6 @@ const AnnouncementsComponent = () => {
     }
   };
 
-  const viewNotedEmployees = async (announcement) => {
-    try {
-      setSelectedAnnouncement(announcement);
-      setLoading(true);
-      
-      const res = await axios.get(
-        `${API_BASE}/announcements/${announcement.id}/noted_employees/`,
-        { headers: { Authorization: `Token ${token}` } }
-      );
-      
-      setNotedEmployees(res.data);
-      setNotedModalVisible(true);
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Failed to fetch noted employees');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const renderItem = ({ item }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -222,11 +196,11 @@ const AnnouncementsComponent = () => {
       
       <View style={styles.cardFooter}>
         {!isManager && employeeProfileId && (
-          <>
+          <View style={styles.notedStatusContainer}>
             {item.noted_by?.includes(employeeProfileId) ? (
-              <View style={[styles.notedButton, styles.notedButtonActive]}>
-                <Icon name="check-circle" size={20} color="#fff" />
-                <Text style={styles.notedButtonText}>Noted</Text>
+              <View style={styles.notedStatus}>
+                <Icon name="check-circle" size={20} color="#4caf50" />
+                <Text style={styles.notedStatusText}>Noted</Text>
               </View>
             ) : (
               <TouchableOpacity 
@@ -237,18 +211,15 @@ const AnnouncementsComponent = () => {
                 <Text style={styles.notedButtonText}>Mark as Noted</Text>
               </TouchableOpacity>
             )}
-          </>
+          </View>
         )}
         
-        <TouchableOpacity 
-          onPress={() => viewNotedEmployees(item)}
-          style={styles.notedCountContainer}
-        >
+        <View style={styles.notedCountContainer}>
           <Icon name="people" size={18} color="#666" />
           <Text style={styles.notedCountText}>
             {item.noted_count || 0} noted
           </Text>
-        </TouchableOpacity>
+        </View>
       </View>
       
       {isManager && (
@@ -338,51 +309,6 @@ const AnnouncementsComponent = () => {
           isLoadingMore && <ActivityIndicator size="small" style={{ marginVertical: 10 }} />
         }
       />
-
-      <Modal
-        visible={notedModalVisible}
-        animationType="slide"
-        onRequestClose={() => setNotedModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              Noted by ({selectedAnnouncement?.noted_count || 0})
-            </Text>
-            <TouchableOpacity 
-              onPress={() => setNotedModalVisible(false)}
-              style={styles.closeButton}
-            >
-              <Icon name="close" size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.modalContent}>
-            {notedEmployees.length > 0 ? (
-              notedEmployees.map(employee => (
-                <View key={employee.id} style={styles.employeeItem}>
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>
-                      {employee.first_name.charAt(0)}{employee.last_name.charAt(0)}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text style={styles.employeeName}>
-                      {employee.first_name} {employee.last_name}
-                    </Text>
-                    <Text style={styles.employeeRole}>{employee.role}</Text>
-                  </View>
-                </View>
-              ))
-            ) : (
-              <View style={styles.emptyEmployeeContainer}>
-                <Icon name="people-outline" size={50} color="#ddd" />
-                <Text style={styles.emptyEmployeeText}>No one has marked as noted yet</Text>
-              </View>
-            )}
-          </ScrollView>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -500,6 +426,19 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     marginTop: 8
   },
+  notedStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  notedStatus: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  notedStatusText: {
+    color: '#4caf50',
+    marginLeft: 6,
+    fontWeight: '500'
+  },
   notedButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -508,9 +447,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
     alignSelf: 'flex-start'
-  },
-  notedButtonActive: {
-    backgroundColor: '#388e3c'
   },
   notedButtonText: {
     color: 'white',
@@ -550,71 +486,6 @@ const styles = StyleSheet.create({
     marginTop: 10, 
     color: '#666',
     fontSize: 16
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'white'
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#f8f9fa'
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333'
-  },
-  closeButton: {
-    padding: 5
-  },
-  modalContent: {
-    flex: 1,
-    padding: 16
-  },
-  employeeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0'
-  },
-  avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#e3f2fd',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12
-  },
-  avatarText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1a73e8'
-  },
-  employeeName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333'
-  },
-  employeeRole: {
-    fontSize: 14,
-    color: '#666'
-  },
-  emptyEmployeeContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40
-  },
-  emptyEmployeeText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#999'
   }
 });
 
