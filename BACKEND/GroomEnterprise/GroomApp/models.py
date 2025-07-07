@@ -261,7 +261,16 @@ class Announcement(models.Model):
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    noted_by = models.ManyToManyField(Employee, related_name='noted_announcements', blank=True)
+    seen_by = models.ManyToManyField(
+        Employee, 
+        related_name='seen_announcements', 
+        blank=True
+    )
+    noted_by = models.ManyToManyField(
+        Employee, 
+        related_name='noted_announcements', 
+        blank=True
+    )
 
     def __str__(self):
         return f"{self.title} by {self.manager.username}"

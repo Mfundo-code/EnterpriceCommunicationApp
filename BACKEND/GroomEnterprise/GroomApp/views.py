@@ -265,11 +265,11 @@ def notification_counts(request):
             is_read=False
         ).count()
         
-        # Count announcements not noted by employee
+        # Count announcements not seen by employee
         announcements_count = Announcement.objects.filter(
             manager=manager
         ).exclude(
-            noted_by=employee
+            seen_by=employee
         ).count()
         
         # Count unread notifications
@@ -774,6 +774,11 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
             return Announcement.objects.filter(manager=user).order_by('-created_at')
         return Announcement.objects.filter(manager=user.employee_profile.manager).order_by('-created_at')
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
     def perform_create(self, serializer):
         if not hasattr(self.request.user, 'manager_profile'):
             raise PermissionDenied("Only managers can create announcements")
@@ -789,6 +794,21 @@ class EmployeeNotificationViewSet(viewsets.ModelViewSet):
         if hasattr(self.request.user, 'employee_profile'):
             return EmployeeNotification.objects.filter(employee=self.request.user.employee_profile).order_by('-created_at')
         return EmployeeNotification.objects.none()
+
+
+class MarkAnnouncementSeenView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        announcement = get_object_or_404(Announcement, pk=pk)
+        employee = request.user.employee_profile
+        
+        if announcement.seen_by.filter(id=employee.id).exists():
+            return Response({'detail': 'Already seen'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        announcement.seen_by.add(employee)
+        return Response({'detail': 'Marked as seen'}, status=status.HTTP_200_OK)
 
 
 class MarkAnnouncementNotedView(APIView):
@@ -876,11 +896,12 @@ class ResetNotificationCountView(APIView):
                 ).update(is_read=True)
                 
             elif notification_type == 'announcements':
-                # Mark announcements as noted
+                # Mark announcements as seen
                 announcements = Announcement.objects.filter(
                     manager=employee.manager
-                ).exclude(noted_by=employee)
+                ).exclude(seen_by=employee)
+                
                 for ann in announcements:
-                    ann.noted_by.add(employee)
+                    ann.seen_by.add(employee)
 
         return Response({'detail': 'Notification count reset'})

@@ -20,6 +20,7 @@ from .views import (
     AnnouncementViewSet,
     SuggestionViewSet,
     ChangePasswordView,
+    MarkAnnouncementSeenView,  # Added new view
     MarkAnnouncementNotedView,
     NotedEmployeesView,
     current_user,
@@ -68,6 +69,7 @@ urlpatterns = [
     path('task-notifications/mark-all-read/', TaskNotificationViewSet.as_view({'post': 'mark_all_read'}), name='task-notifications-mark-all-read'),
 
     # Announcement actions
+    path('announcements/<int:pk>/mark_seen/', MarkAnnouncementSeenView.as_view(), name='mark-announcement-seen'),  # New endpoint
     path('announcements/<int:pk>/mark_noted/', MarkAnnouncementNotedView.as_view(), name='mark-announcement-noted'),
     path('announcements/<int:pk>/noted_employees/', NotedEmployeesView.as_view(), name='noted-employees'),
 

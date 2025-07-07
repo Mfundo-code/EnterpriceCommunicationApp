@@ -177,21 +177,36 @@ class EmployeeNotificationSerializer(serializers.ModelSerializer):
         fields = ['id', 'message', 'is_read', 'created_at']
         read_only_fields = ['created_at']
 
+# serializers.py
 class AnnouncementSerializer(serializers.ModelSerializer):
     manager = serializers.StringRelatedField(read_only=True)
-    noted_by = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     noted_count = serializers.SerializerMethodField()
+    is_seen = serializers.SerializerMethodField()
+    is_noted = serializers.SerializerMethodField()
 
     class Meta:
         model = Announcement
         fields = [
             'id', 'title', 'content', 'manager', 
-            'created_at', 'updated_at', 'noted_by', 'noted_count'
+            'created_at', 'updated_at', 'noted_by', 'noted_count',
+            'is_seen', 'is_noted'
         ]
         read_only_fields = [
             'manager', 'created_at', 'updated_at', 
-            'noted_by', 'noted_count'
+            'noted_by', 'noted_count', 'is_seen', 'is_noted'
         ]
 
     def get_noted_count(self, obj):
         return obj.noted_by.count()
+    
+    def get_is_seen(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'employee_profile'):
+            return obj.seen_by.filter(id=request.user.employee_profile.id).exists()
+        return False
+
+    def get_is_noted(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'employee_profile'):
+            return obj.noted_by.filter(id=request.user.employee_profile.id).exists()
+        return False
