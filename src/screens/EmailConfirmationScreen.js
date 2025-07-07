@@ -27,7 +27,7 @@ const EmailConfirmationScreen = ({ route, navigation }) => {
     <View style={styles.container}>
       <Text style={styles.title}>Confirm Your Email</Text>
       <Text style={styles.subtitle}>
-        We've sent a 6-digit code to your email address
+        We've sent a 6-digit code to your email address if taking ong chack on spams!
       </Text>
       
       {error ? <Text style={styles.error}>{error}</Text> : null}
