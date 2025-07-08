@@ -14,7 +14,7 @@ import {
 import axios from 'axios';
 import { AuthContext } from '../../App';
 
-const API_BASE = 'http://www.teamkonekt.com/api/employees/';
+const API_BASE = 'https://www.teamkonekt.com/api/employees/';
 
 const EmployeesComponent = () => {
   const { token } = useContext(AuthContext);

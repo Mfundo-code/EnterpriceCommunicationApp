@@ -18,7 +18,7 @@ import { AuthContext } from '../../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNotifications } from './NotificationContext';
 
-const API_BASE = 'http://www.teamkonekt.com/api/suggestions/';
+const API_BASE = 'https://www.teamkonekt.com/api/suggestions/';
 
 const STATUS_STYLES = {
   UNREAD:   { text: '#c62828', bg: '#ffebee' },

@@ -92,7 +92,7 @@ android {
             storePassword MYAPP_RELEASE_STORE_PASSWORD
             keyAlias MYAPP_RELEASE_KEY_ALIAS
             keyPassword MYAPP_RELEASE_KEY_PASSWORD
-    }
+       }
 
         debug {
             storeFile file('debug.keystore')
@@ -115,8 +115,6 @@ android {
     }
 }
 
-apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
-
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
@@ -128,3 +126,5 @@ dependencies {
     }
 }
 
+
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"

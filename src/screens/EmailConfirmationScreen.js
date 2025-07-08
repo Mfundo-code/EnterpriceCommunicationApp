@@ -12,7 +12,7 @@ const EmailConfirmationScreen = ({ route, navigation }) => {
   const handleConfirm = async () => {
     try {
       const response = await axios.post(
-        'http://www.teamkonekt.com/api/confirm-email/',
+        'https://www.teamkonekt.com/api/confirm-email/',
         { user_id, code }
       );
       

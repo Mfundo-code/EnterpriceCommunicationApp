@@ -1,11 +1,11 @@
 // src/components/RootComponent.js
 import React from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, Text } from 'react-native';
-import EntypoIcon from 'react-native-vector-icons/Entypo';
 import AntIcon from 'react-native-vector-icons/AntDesign';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import { useNavigation } from '@react-navigation/native';
 import { useNotifications } from './NotificationContext';
+import SimpleLineIcons from 'react-native-vector-icons/SimpleLineIcons';
 
 const { width } = Dimensions.get('window');
 
@@ -19,7 +19,7 @@ const RootComponent = () => {
       <TouchableOpacity onPress={() => navigation.navigate('Home')}>
         <View style={styles.buttonContainer}>
           <View style={styles.iconWrapper}>
-            <EntypoIcon name="home" style={styles.icon} />
+            <SimpleLineIcons name="home" style={styles.icon} />
             {notificationCounts.home > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{notificationCounts.home}</Text>

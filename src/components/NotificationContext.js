@@ -2,7 +2,7 @@ import React, { createContext, useRef, useState, useContext, useEffect, useCallb
 import axios from 'axios';
 import { AuthContext } from '../../App';
 
-const API_BASE = 'http://www.teamkonekt.com/api';
+const API_BASE = 'https://www.teamkonekt.com/api';
 
 const NotificationContext = createContext();
 

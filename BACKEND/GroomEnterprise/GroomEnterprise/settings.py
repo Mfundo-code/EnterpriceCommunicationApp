@@ -108,9 +108,9 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://164.68.125.31',
     'http://164.68.125.31:8000',
-    'http://teamkonekt.com',
+    'https://teamkonekt.com',
     'http://teamkonekt.com:8000',
-    'http://www.teamkonekt.com',
+    'https://www.teamkonekt.com',
     'http://192.168.0.137:8000',
     'http://localhost:3000',
 ]
