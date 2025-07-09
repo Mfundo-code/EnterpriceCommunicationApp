@@ -1,7 +1,7 @@
 from datetime import timedelta
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth import authenticate, get_user_model
 from django.core.exceptions import PermissionDenied
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import viewsets, generics, status, pagination
 from rest_framework.authentication import TokenAuthentication
@@ -13,6 +13,8 @@ from rest_framework.views import APIView
 import random
 from django.core.mail import send_mail
 from django.conf import settings
+from django.http import FileResponse, HttpResponseNotFound
+import os
 
 from .models import (
     Employee,
@@ -41,6 +43,17 @@ from .serializers import (
 
 User = get_user_model()
 
+def landing_page(request):
+    return render(request, 'index.html')
+
+def download_apk(request):
+    apk_path = os.path.join(settings.BASE_DIR, 'static', 'downloads', 'TeamKonekt.apk')
+    if os.path.exists(apk_path):
+        response = FileResponse(open(apk_path, 'rb'))
+        response['Content-Type'] = 'application/vnd.android.package-archive'
+        response['Content-Disposition'] = 'attachment; filename="TeamKonekt.apk"'
+        return response
+    return HttpResponseNotFound('APK not found')
 
 class IsManager(BasePermission):
     def has_permission(self, request, view):

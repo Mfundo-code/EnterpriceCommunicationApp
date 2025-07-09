@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,7 +13,6 @@ ALLOWED_HOSTS = [
     'www.teamkonekt.com',
     'localhost',
 ]
-
 
 INSTALLED_APPS = [
     'corsheaders',
@@ -38,12 +38,12 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'GroomEnterprise.urls'
+ROOT_URLCONF = 'GroomApp.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -69,7 +69,6 @@ DATABASES = {
     }
 }
 
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -92,6 +91,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
@@ -106,15 +106,11 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    'http://164.68.125.31',
-    'http://164.68.125.31:8000',
+    'https://164.68.125.31',
     'https://teamkonekt.com',
-    'http://teamkonekt.com:8000',
     'https://www.teamkonekt.com',
     'http://192.168.0.137:8000',
-    'http://localhost:3000',
 ]
-
 
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -145,3 +141,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'mfundoknox@gmail.com'
 EMAIL_HOST_PASSWORD = 'wqsdayocqqyofrns'
 DEFAULT_FROM_EMAIL = 'connectteam2025@gmail.com'
+
+# Custom static files handling
+if not DEBUG:
+    STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]

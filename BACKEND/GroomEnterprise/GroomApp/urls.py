@@ -20,13 +20,15 @@ from .views import (
     AnnouncementViewSet,
     SuggestionViewSet,
     ChangePasswordView,
-    MarkAnnouncementSeenView,  # Added new view
+    MarkAnnouncementSeenView,
     MarkAnnouncementNotedView,
     NotedEmployeesView,
     current_user,
     ConfirmEmailView,
     mark_report_seen,
-    mark_all_reports_seen
+    mark_all_reports_seen,
+    landing_page,
+    download_apk,
 )
 
 router = DefaultRouter()
@@ -39,6 +41,10 @@ router.register(r'suggestions', SuggestionViewSet, basename='suggestion')
 router.register(r'employee-notifications', EmployeeNotificationViewSet, basename='employee-notification')
 
 urlpatterns = [
+    # Landing page route
+    path('', landing_page, name='landing-page'),
+    path('download-apk/', download_apk, name='download-apk'),
+
     # Authentication
     path('auth/user/', current_user, name='current-user'),
     path('signup/', ManagerSignupView.as_view(), name='manager-signup'),
@@ -69,7 +75,7 @@ urlpatterns = [
     path('task-notifications/mark-all-read/', TaskNotificationViewSet.as_view({'post': 'mark_all_read'}), name='task-notifications-mark-all-read'),
 
     # Announcement actions
-    path('announcements/<int:pk>/mark_seen/', MarkAnnouncementSeenView.as_view(), name='mark-announcement-seen'),  # New endpoint
+    path('announcements/<int:pk>/mark_seen/', MarkAnnouncementSeenView.as_view(), name='mark-announcement-seen'),
     path('announcements/<int:pk>/mark_noted/', MarkAnnouncementNotedView.as_view(), name='mark-announcement-noted'),
     path('announcements/<int:pk>/noted_employees/', NotedEmployeesView.as_view(), name='noted-employees'),
 
