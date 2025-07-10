@@ -17,7 +17,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { AuthContext } from '../../App';
 import dayjs from 'dayjs';
 
-const API_BASE = 'https://www.teamkonekt.com/api';
+const API_BASE = 'https://www.teamkonekt.com';
 
 const ReportsComponent = () => {
   const { token } = useContext(AuthContext);

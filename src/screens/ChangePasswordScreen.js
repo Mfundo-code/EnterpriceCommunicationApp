@@ -34,7 +34,7 @@ const ChangePasswordScreen = ({ navigation }) => {
 
     try {
       await axios.post(
-        'http://www.teamkonekt.com/api/change-password/',
+        'http://www.teamkonekt.com/change-password/',
         {
           old_password: currentPassword,
           new_password: newPassword,

@@ -29,7 +29,7 @@ const SignInScreen = ({ navigation }) => {
 
   const handleSubmit = async () => {
     try {
-      const { data } = await axios.post('https://www.teamkonekt.com/api/login/', {
+      const { data } = await axios.post('https://www.teamkonekt.com/login/', {
         email: username,
         password,
       });

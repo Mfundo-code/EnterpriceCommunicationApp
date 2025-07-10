@@ -14,7 +14,7 @@ import { AuthContext } from '../../App';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNotifications } from './NotificationContext';
 
-const API_BASE = 'https://www.teamkonekt.com/api';
+const API_BASE = 'https://www.teamkonekt.com';
 
 const AnnouncementsComponent = () => {
   const { token } = useContext(AuthContext);
