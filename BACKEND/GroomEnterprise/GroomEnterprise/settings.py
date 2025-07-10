@@ -38,7 +38,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'GroomEnterprise.urls'
+ROOT_URLCONF = 'GroomApp.urls'
 
 TEMPLATES = [
     {
